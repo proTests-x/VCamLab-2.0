@@ -8,14 +8,14 @@
             <key>cell</key><string>PSGroupCell</string>
             <key>label</key><string>VirtualCamPro</string>
             <key>footerText</key>
-            <string>先选择来源，再按当前页面显示的分组完成配置。网络流参数由 OBS/发送端决定；旋转、镜像、FPS 和质量控件只作用于手机本地媒体。</string>
+            <string>Selecciona primero una fuente y completa los grupos que aparezcan. Los parámetros de red dependen de OBS o del emisor; la rotación, el reflejo, los FPS y la calidad solo afectan al contenido local del iPhone.</string>
         </dict>
         <dict>
             <key>cell</key><string>PSSwitchCell</string>
             <key>default</key><false/>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>enabled</string>
-            <key>label</key><string>启用系统摄像头替换</string>
+            <key>label</key><string>Activar reemplazo de la cámara del sistema</string>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
         <dict>
@@ -24,12 +24,12 @@
             <key>default</key><integer>0</integer>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>sourceType</string>
-            <key>label</key><string>替换来源</string>
+            <key>label</key><string>Fuente de reemplazo</string>
             <key>validTitles</key>
             <array>
-                <string>网络 HLS / MJPEG</string>
-                <string>设备屏幕实时镜像</string>
-                <string>手机本地视频 / 音频</string>
+                <string>HLS / MJPEG de red</string>
+                <string>Duplicación de pantalla en tiempo real</string>
+                <string>Video / audio local del iPhone</string>
             </array>
             <key>validValues</key>
             <array><integer>0</integer><integer>1</integer><integer>2</integer></array>
@@ -37,41 +37,41 @@
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>当前配置</string>
+            <key>label</key><string>Configuración actual</string>
             <key>get</key><string>currentSourceConfigurationSummary:</string>
             <key>vcConfigurationStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>查看当前来源操作指引</string>
+            <key>label</key><string>Ver instrucciones de la fuente actual</string>
             <key>action</key><string>showCurrentSourceGuide:</string>
         </dict>
 
         <dict>
             <key>cell</key><string>PSGroupCell</string>
-            <key>label</key><string>网络流</string>
+            <key>label</key><string>Transmisión de red</string>
             <key>vcSourceTypes</key><array><integer>0</integer></array>
-            <key>footerText</key><string>推荐使用 MJPEG 获得最低延迟。手机只解码发送端完整帧，所有画面参数由 Windows/OBS 发送端决定。</string>
+            <key>footerText</key><string>Se recomienda MJPEG para obtener la menor latencia. El iPhone solo decodifica los fotogramas completos del emisor; todos los parámetros de imagen dependen de Windows/OBS.</string>
         </dict>
         <dict>
             <key>cell</key><string>PSEditTextCell</string>
             <key>default</key><string></string>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>streamURL</string>
-            <key>label</key><string>网络流 URL</string>
+            <key>label</key><string>URL de transmisión</string>
             <key>placeholder</key><string>http://192.168.1.10:8888/live.mjpg</string>
             <key>vcSourceTypes</key><array><integer>0</integer></array>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>检测当前网络流</string>
+            <key>label</key><string>Probar transmisión actual</string>
             <key>action</key><string>testStreamConnection:</string>
             <key>vcSourceTypes</key><array><integer>0</integer></array>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>传输端点</string>
+            <key>label</key><string>Punto de conexión</string>
             <key>get</key><string>currentNetworkEndpointSummary:</string>
             <key>vcSourceTypes</key><array><integer>0</integer></array>
             <key>vcConfigurationStatus</key><true/>
@@ -79,20 +79,20 @@
 
         <dict>
             <key>cell</key><string>PSGroupCell</string>
-            <key>label</key><string>屏幕镜像</string>
+            <key>label</key><string>Duplicación de pantalla</string>
             <key>vcSourceTypes</key><array><integer>1</integer></array>
-            <key>footerText</key><string>屏幕来源按设备显示方向和系统刷新节奏直接输出，不使用本地视频的旋转、镜像、质量或帧率设置。</string>
+            <key>footerText</key><string>La fuente de pantalla usa directamente la orientación y frecuencia de actualización del dispositivo; no utiliza la rotación, el reflejo, la calidad ni los FPS del video local.</string>
         </dict>
 
         <dict>
             <key>cell</key><string>PSGroupCell</string>
-            <key>label</key><string>手机本地媒体</string>
+            <key>label</key><string>Contenido local del iPhone</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
-            <key>footerText</key><string>可从“文件”批量选择视频/音频，也可从“照片”一次选择多段视频。所选媒体会复制到 /var/mobile/Media/VirtualCamPro/；目录中至少有 2 段视频时，播放期间按音量加/减切换下一段/上一段。</string>
+            <key>footerText</key><string>Puedes seleccionar varios videos o audios desde Archivos, o varios videos desde Fotos. Se copiarán a /var/mobile/Media/VirtualCamPro/; si hay al menos dos videos, usa volumen +/− para cambiar al siguiente o anterior durante la reproducción.</string>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>选择本地视频 / 音频</string>
+            <key>label</key><string>Seleccionar video / audio local</string>
             <key>action</key><string>chooseLocalMedia:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
         </dict>
@@ -100,46 +100,46 @@
             <key>cell</key><string>PSTitleValueCell</string>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>localMediaPath</string>
-            <key>label</key><string>当前媒体</string>
+            <key>label</key><string>Contenido actual</string>
             <key>get</key><string>currentLocalMediaName:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>音量键播放列表</string>
+            <key>label</key><string>Lista controlada por volumen</string>
             <key>get</key><string>currentLocalVideoPlaylistSummary:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>已导入媒体库</string>
+            <key>label</key><string>Biblioteca importada</string>
             <key>get</key><string>currentLocalMediaLibrarySummary:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>查看本地媒体库</string>
+            <key>label</key><string>Ver biblioteca local</string>
             <key>action</key><string>showLocalMediaLibrary:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>音量键 Hook 状态</string>
+            <key>label</key><string>Estado del hook de volumen</string>
             <key>get</key><string>currentLocalVolumeHookStatus:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
             <key>vcLiveStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>SpringBoard 变换状态</string>
+            <key>label</key><string>Estado de transformación de SpringBoard</string>
             <key>get</key><string>currentLocalTransformStatus:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
             <key>vcLiveStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>清除当前媒体选择</string>
+            <key>label</key><string>Borrar selección actual</string>
             <key>action</key><string>clearLocalMedia:</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
         </dict>
@@ -148,7 +148,7 @@
             <key>default</key><true/>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>loopLocalMedia</string>
-            <key>label</key><string>循环播放当前本地媒体</string>
+            <key>label</key><string>Repetir contenido local actual</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
@@ -157,7 +157,7 @@
             <key>default</key><integer>60</integer>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>preferredFPS</string>
-            <key>label</key><string>本地视频最高 FPS</string>
+            <key>label</key><string>FPS máximos del video local</string>
             <key>min</key><integer>1</integer>
             <key>max</key><integer>240</integer>
             <key>showValue</key><true/>
@@ -170,11 +170,11 @@
             <key>default</key><integer>1920</integer>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>maximumPixelDimension</string>
-            <key>label</key><string>本地视频解码质量</string>
+            <key>label</key><string>Calidad de decodificación local</string>
             <key>validTitles</key>
             <array>
-                <string>1280（省电）</string><string>1920（推荐）</string>
-                <string>2560（高清）</string><string>3840（超清）</string>
+                <string>1280 (ahorro de energía)</string><string>1920 (recomendado)</string>
+                <string>2560 (alta definición)</string><string>3840 (ultra alta definición)</string>
             </array>
             <key>validValues</key>
             <array><integer>1280</integer><integer>1920</integer><integer>2560</integer><integer>3840</integer></array>
@@ -187,9 +187,9 @@
             <key>default</key><integer>0</integer>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>sourceRotation</string>
-            <key>label</key><string>本地视频旋转</string>
+            <key>label</key><string>Rotación del video local</string>
             <key>validTitles</key>
-            <array><string>不旋转</string><string>顺时针 90°</string><string>旋转 180°</string><string>逆时针 90°</string></array>
+            <array><string>Sin rotación</string><string>90° a la derecha</string><string>Girar 180°</string><string>90° a la izquierda</string></array>
             <key>validValues</key>
             <array><integer>0</integer><integer>90</integer><integer>180</integer><integer>270</integer></array>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
@@ -200,7 +200,7 @@
             <key>default</key><false/>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>mirrorSource</string>
-            <key>label</key><string>水平镜像本地视频</string>
+            <key>label</key><string>Reflejar horizontalmente el video local</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
@@ -209,7 +209,7 @@
             <key>default</key><true/>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>aspectFill</string>
-            <key>label</key><string>本地视频填满画面</string>
+            <key>label</key><string>Rellenar pantalla con el video local</string>
             <key>vcSourceTypes</key><array><integer>2</integer></array>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
@@ -218,7 +218,7 @@
             <key>default</key><real>1.0</real>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>jpegQuality</string>
-            <key>label</key><string>本地画面拍照 JPEG 质量</string>
+            <key>label</key><string>Calidad JPEG de fotos del contenido local</string>
             <key>min</key><real>0.5</real>
             <key>max</key><real>1.0</real>
             <key>showValue</key><true/>
@@ -228,55 +228,55 @@
 
         <dict>
             <key>cell</key><string>PSGroupCell</string>
-            <key>label</key><string>运行状态与恢复</string>
-            <key>footerText</key><string>页面可见时每秒刷新轻量状态，离开设置后自动停止。系统管线仅在相机应用实际采集时显示活跃；诊断心跳不会关闭任何 CaptureSession 的逐样本 fallback。</string>
+            <key>label</key><string>Estado y recuperación</string>
+            <key>footerText</key><string>El estado se actualiza cada segundo mientras esta página está visible y se detiene al salir. La canalización del sistema solo aparece activa cuando una aplicación captura video; el diagnóstico no desactiva la ruta alternativa por muestra de ninguna CaptureSession.</string>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>来源运行状态</string>
+            <key>label</key><string>Estado de la fuente</string>
             <key>get</key><string>currentSourceRuntimeStatus:</string>
             <key>vcLiveStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>共享视频总线</string>
+            <key>label</key><string>Bus de video compartido</string>
             <key>get</key><string>currentSharedVideoBusStatus:</string>
             <key>vcLiveStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>系统视频管线</string>
+            <key>label</key><string>Canalización de video del sistema</string>
             <key>get</key><string>currentSystemVideoPipelineStatus:</string>
             <key>vcLiveStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>应用回退管线</string>
+            <key>label</key><string>Canalización alternativa de la aplicación</string>
             <key>get</key><string>currentApplicationFallbackStatus:</string>
             <key>vcLiveStatus</key><true/>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>重载当前来源</string>
+            <key>label</key><string>Recargar fuente actual</string>
             <key>action</key><string>reloadCurrentSource:</string>
         </dict>
         <dict>
             <key>cell</key><string>PSButtonCell</string>
-            <key>label</key><string>复制运行诊断信息</string>
+            <key>label</key><string>Copiar diagnóstico de ejecución</string>
             <key>action</key><string>copyRuntimeDiagnostics:</string>
         </dict>
 
         <dict>
             <key>cell</key><string>PSGroupCell</string>
-            <key>label</key><string>稳定性</string>
-            <key>footerText</key><string>断流保护仅决定替换帧过期后的行为；任何解码或私有节点失败都保持原相机/麦克风路径。</string>
+            <key>label</key><string>Estabilidad</string>
+            <key>footerText</key><string>La protección ante interrupciones solo determina qué ocurre cuando caduca el fotograma de reemplazo; cualquier fallo de decodificación o nodo privado conserva la ruta original de cámara y micrófono.</string>
         </dict>
         <dict>
             <key>cell</key><string>PSSwitchCell</string>
             <key>default</key><true/>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>holdLastFrame</string>
-            <key>label</key><string>断流后保持最后一帧</string>
+            <key>label</key><string>Conservar el último fotograma al interrumpirse</string>
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
         <dict>
@@ -284,7 +284,7 @@
             <key>default</key><real>8.0</real>
             <key>defaults</key><string>com.murkaska.virtualcampro</string>
             <key>key</key><string>staleFrameTimeout</string>
-            <key>label</key><string>旧帧超时（秒）</string>
+            <key>label</key><string>Caducidad del fotograma (segundos)</string>
             <key>min</key><real>2.0</real>
             <key>max</key><real>30.0</real>
             <key>showValue</key><true/>
@@ -292,12 +292,12 @@
         </dict>
         <dict>
             <key>cell</key><string>PSGroupCell</string>
-            <key>label</key><string>关于</string>
-            <key>footerText</key><string>VirtualCamPro 替换 L2–L5 媒体样本，不伪装相机设备、Apple 组件或硬件传感器。私有 BWNodeOutput 的最终兼容性仍以目标 iOS 真机验收为准。</string>
+            <key>label</key><string>Acerca de</string>
+            <key>footerText</key><string>VirtualCamPro reemplaza muestras multimedia L2–L5; no suplanta dispositivos de cámara, componentes de Apple ni sensores. La compatibilidad final de BWNodeOutput debe comprobarse en el dispositivo iOS de destino.</string>
         </dict>
         <dict>
             <key>cell</key><string>PSTitleValueCell</string>
-            <key>label</key><string>插件版本</string>
+            <key>label</key><string>Versión del plugin</string>
             <key>get</key><string>currentPackageVersion:</string>
         </dict>
     </array>

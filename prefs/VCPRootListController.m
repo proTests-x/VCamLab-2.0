@@ -78,37 +78,37 @@ static NSString *VCPRuntimeHeartbeatDescription(VCPNotifyChannel channel,
     uint64_t age = UINT64_MAX;
     if (!VCPGetNotifyChannelState(channel, &timestamp) ||
         !VCPRuntimeTimestampAge(timestamp, &age)) {
-        return [NSString stringWithFormat:@"%@ 未注入 / 无存活信号", processName];
+        return [NSString stringWithFormat:@"%@ no está inyectado / sin señal de actividad", processName];
     }
     if (age > VC_RUNTIME_HEARTBEAT_MAX_AGE_MS) {
-        return [NSString stringWithFormat:@"%@ 已失联（旧状态 %@ ms）",
+        return [NSString stringWithFormat:@"%@ sin conexión (estado anterior de %@ ms)",
                                           processName, @(age)];
     }
-    return [NSString stringWithFormat:@"%@ 存活（%@ ms）", processName, @(age)];
+    return [NSString stringWithFormat:@"%@ activo (%@ ms)", processName, @(age)];
 }
 
 static NSString *VCPSharedVideoFailureDescription(uint8_t detail) {
     switch ((VCSharedVideoFailureReason)detail) {
         case VCSharedVideoFailureControlStateUnavailable:
-            return @"控制通道状态不可读";
+            return @"No se puede leer el estado del canal de control";
         case VCSharedVideoFailureControlSurfaceLookup:
-            return @"控制 IOSurface 映射失败";
+            return @"No se pudo mapear el IOSurface de control";
         case VCSharedVideoFailureControlSurfaceInvalid:
-            return @"控制 IOSurface 内容无效";
+            return @"El contenido del IOSurface de control no es válido";
         case VCSharedVideoFailureDirectStateUnavailable:
-            return @"直接帧状态与控制通道均不可用";
+            return @"No están disponibles el estado de fotograma directo ni el canal de control";
         case VCSharedVideoFailureNoPublishedFrame:
-            return @"生产者尚未发布共享帧";
+            return @"El productor aún no ha publicado un fotograma compartido";
         case VCSharedVideoFailureFrameStale:
-            return @"共享帧已过期";
+            return @"El fotograma compartido ha caducado";
         case VCSharedVideoFailureFrameSurfaceLookup:
-            return @"帧 IOSurface 跨进程映射失败";
+            return @"No se pudo mapear el IOSurface del fotograma entre procesos";
         case VCSharedVideoFailurePixelBufferWrap:
-            return @"IOSurface 无法包装为像素缓冲";
+            return @"No se pudo convertir el IOSurface en un búfer de píxeles";
         case VCSharedVideoFailurePublicationRace:
-            return @"连续发布竞争，安全重试耗尽";
+            return @"Conflicto continuo de publicación; se agotaron los reintentos seguros";
         default:
-            return @"未提供底层失败码";
+            return @"No se proporcionó un código de error interno";
     }
 }
 
@@ -119,39 +119,39 @@ static NSString *VCPMediaServerVideoRuntimeDescription(uint64_t state) {
     uint64_t timestamp = VCTimestampFromRuntimeState(state);
     uint64_t age = UINT64_MAX;
     NSString *ageText = VCPRuntimeTimestampAge(timestamp, &age)
-        ? [NSString stringWithFormat:@"%@ ms 前", @(age)]
-        : @"时间不可用";
+        ? [NSString stringWithFormat:@"hace %@ ms", @(age)]
+        : @"Hora no disponible";
     switch (event) {
         case VCMediaServerVideoRuntimeInjected:
-            return [NSString stringWithFormat:@"已注入，等待扫描（%@）", ageText];
+            return [NSString stringWithFormat:@"Inyectado; esperando análisis (%@)", ageText];
         case VCMediaServerVideoRuntimeScanning:
-            return [NSString stringWithFormat:@"正在扫描，相邻重试 %@（%@）",
+            return [NSString stringWithFormat:@"Analizando; reintento consecutivo %@ (%@)",
                                               @(detail), ageText];
         case VCMediaServerVideoRuntimeHookInstalled:
-            return [NSString stringWithFormat:@"Hook 已安装：%@ 个类（%@）",
+            return [NSString stringWithFormat:@"Hook instalado: %@ clases (%@)",
                                               @(detail), ageText];
         case VCMediaServerVideoRuntimeNodeClassUnavailable:
-            return [NSString stringWithFormat:@"未找到 BWNodeOutput（%@）", ageText];
+            return [NSString stringWithFormat:@"No se encontró BWNodeOutput (%@)", ageText];
         case VCMediaServerVideoRuntimeIncompatibleSignature:
-            return [NSString stringWithFormat:@"emitSampleBuffer: 签名不兼容（%@）",
+            return [NSString stringWithFormat:@"Firma de emitSampleBuffer: incompatible (%@)",
                                               ageText];
         case VCMediaServerVideoRuntimeHookCapacityExceeded:
-            return [NSString stringWithFormat:@"Hook 数量超过安全上限（%@）", ageText];
+            return [NSString stringWithFormat:@"La cantidad de hooks supera el límite seguro (%@)", ageText];
         case VCMediaServerVideoRuntimeSampleObserved:
-            return [NSString stringWithFormat:@"已收到系统相机视频样本（%@）", ageText];
+            return [NSString stringWithFormat:@"Se recibió una muestra de video de la cámara del sistema (%@)", ageText];
         case VCMediaServerVideoRuntimeSourceUnavailable:
             return [NSString stringWithFormat:
-                @"相机样本已到达，但共享来源不可见：%@（%@）",
+                @"Llegó una muestra de cámara, pero la fuente compartida no está visible: %@ (%@)",
                 VCPSharedVideoFailureDescription(detail),
                 ageText];
         case VCMediaServerVideoRuntimeUnsupportedPixelFormat:
-            return [NSString stringWithFormat:@"相机像素格式暂不支持（%@）", ageText];
+            return [NSString stringWithFormat:@"El formato de píxeles de la cámara no es compatible (%@)", ageText];
         case VCMediaServerVideoRuntimeConversionFailed:
-            return [NSString stringWithFormat:@"替换帧转换失败（%@）", ageText];
+            return [NSString stringWithFormat:@"Falló la conversión del fotograma de reemplazo (%@)", ageText];
         case VCMediaServerVideoRuntimeReplacementSucceeded:
-            return [NSString stringWithFormat:@"最近一次系统替换成功（%@）", ageText];
+            return [NSString stringWithFormat:@"El reemplazo más reciente del sistema se completó (%@)", ageText];
         default:
-            return @"尚无 mediaserverd 视频阶段数据";
+            return @"Aún no hay datos de la etapa de video de mediaserverd";
     }
 }
 
@@ -159,7 +159,7 @@ static NSString *VCPCurrentMediaServerVideoRuntimeDescription(void) {
     uint64_t runtimeState = 0;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelMediaServerVideoRuntime,
                                   &runtimeState)) {
-        return @"状态读取失败";
+        return @"No se pudo leer el estado";
     }
     NSString *stage = VCPMediaServerVideoRuntimeDescription(runtimeState);
     uint64_t heartbeat = 0;
@@ -168,7 +168,7 @@ static NSString *VCPCurrentMediaServerVideoRuntimeDescription(void) {
                                   &heartbeat) ||
         !VCPRuntimeTimestampAge(heartbeat, &heartbeatAge) ||
         heartbeatAge > VC_RUNTIME_HEARTBEAT_MAX_AGE_MS) {
-        return [NSString stringWithFormat:@"历史状态，当前进程无存活信号：%@",
+        return [NSString stringWithFormat:@"Estado anterior; el proceso actual no tiene señal de actividad: %@",
                                           stage];
     }
     return stage;
@@ -180,39 +180,39 @@ static NSString *VCPApplicationVideoRuntimeDescription(uint64_t state) {
     uint64_t age = UINT64_MAX;
     NSString *ageText = VCPRuntimeTimestampAge(VCTimestampFromRuntimeState(state),
                                                &age)
-        ? [NSString stringWithFormat:@"%@ ms 前", @(age)]
-        : @"时间不可用";
+        ? [NSString stringWithFormat:@"hace %@ ms", @(age)]
+        : @"Hora no disponible";
     switch (event) {
         case VCApplicationVideoRuntimeInjected:
-            return [NSString stringWithFormat:@"应用插件已加载（%@）", ageText];
+            return [NSString stringWithFormat:@"Plugin de la aplicación cargado (%@)", ageText];
         case VCApplicationVideoRuntimeDelegateWrapped:
-            return [NSString stringWithFormat:@"视频输出代理已接管（%@）", ageText];
+            return [NSString stringWithFormat:@"El proxy de salida de video tomó el control (%@)", ageText];
         case VCApplicationVideoRuntimeSystemReplacementObserved:
-            return [NSString stringWithFormat:@"应用已收到系统替换样本（%@）", ageText];
+            return [NSString stringWithFormat:@"La aplicación recibió una muestra reemplazada por el sistema (%@)", ageText];
         case VCApplicationVideoRuntimeSourceUnavailable:
             return [NSString stringWithFormat:
-                @"视频回调已到达，但共享来源不可见：%@（%@）",
+                @"Llegó la devolución de video, pero la fuente compartida no está visible: %@ (%@)",
                 VCPSharedVideoFailureDescription(VCDetailFromRuntimeState(state)),
                 ageText];
         case VCApplicationVideoRuntimeConversionFailed:
-            return [NSString stringWithFormat:@"应用内视频转换失败（%@）", ageText];
+            return [NSString stringWithFormat:@"Falló la conversión de video en la aplicación (%@)", ageText];
         case VCApplicationVideoRuntimeReplacementSucceeded:
-            return [NSString stringWithFormat:@"应用内视频样本替换成功（%@）", ageText];
+            return [NSString stringWithFormat:@"La muestra de video se reemplazó en la aplicación (%@)", ageText];
         case VCApplicationVideoRuntimePreviewOverlayInstalled:
-            return [NSString stringWithFormat:@"预览替换层已安装（%@）", ageText];
+            return [NSString stringWithFormat:@"Capa de reemplazo de vista previa instalada (%@)", ageText];
         case VCApplicationVideoRuntimePreviewSourceUnavailable:
-            return [NSString stringWithFormat:@"预览层运行中，但替换帧不可见：%@（%@）",
+            return [NSString stringWithFormat:@"La capa de vista previa está activa, pero el fotograma de reemplazo no está visible: %@ (%@)",
                                               VCPSharedVideoFailureDescription(
                                                   VCDetailFromRuntimeState(state)),
                                               ageText];
         case VCApplicationVideoRuntimePreviewFrameDisplayed:
-            return [NSString stringWithFormat:@"应用预览已显示替换帧（%@）", ageText];
+            return [NSString stringWithFormat:@"La vista previa de la aplicación mostró el fotograma de reemplazo (%@)", ageText];
         case VCApplicationVideoRuntimePhotoReplacementSucceeded:
-            return [NSString stringWithFormat:@"照片数据替换成功（%@）", ageText];
+            return [NSString stringWithFormat:@"Los datos de la foto se reemplazaron correctamente (%@)", ageText];
         case VCApplicationVideoRuntimePhotoReplacementFailed:
-            return [NSString stringWithFormat:@"照片替换失败，已保留原照片（%@）", ageText];
+            return [NSString stringWithFormat:@"Falló el reemplazo de la foto; se conservó la original (%@)", ageText];
         default:
-            return @"尚无应用内 AVFoundation Hook 活动；请先打开一次相机应用";
+            return @"Aún no hay actividad del hook de AVFoundation en la aplicación; abre primero una aplicación de cámara";
     }
 }
 
@@ -222,29 +222,29 @@ static NSString *VCPProducerVideoRuntimeDescription(uint64_t state) {
     uint64_t age = UINT64_MAX;
     NSString *ageText = VCPRuntimeTimestampAge(VCTimestampFromRuntimeState(state),
                                                &age)
-        ? [NSString stringWithFormat:@"%@ ms 前", @(age)]
-        : @"时间不可用";
+        ? [NSString stringWithFormat:@"hace %@ ms", @(age)]
+        : @"Hora no disponible";
     switch (event) {
         case VCProducerVideoRuntimeNoIOSurface:
-            return [NSString stringWithFormat:@"产出帧没有 IOSurface（%@）", ageText];
+            return [NSString stringWithFormat:@"El fotograma producido no tiene IOSurface (%@)", ageText];
         case VCProducerVideoRuntimeSurfaceIDUnavailable:
-            return [NSString stringWithFormat:@"产出帧没有全局 Surface ID（%@）", ageText];
+            return [NSString stringWithFormat:@"El fotograma producido no tiene un Surface ID global (%@)", ageText];
         case VCProducerVideoRuntimeControlSurfaceUnavailable:
-            return [NSString stringWithFormat:@"控制 IOSurface 创建失败（%@）", ageText];
+            return [NSString stringWithFormat:@"No se pudo crear el IOSurface de control (%@)", ageText];
         case VCProducerVideoRuntimeControlStatePublishFailed:
-            return [NSString stringWithFormat:@"控制状态发布失败（%@）", ageText];
+            return [NSString stringWithFormat:@"No se pudo publicar el estado de control (%@)", ageText];
         case VCProducerVideoRuntimeDirectStatePublishFailed:
-            return [NSString stringWithFormat:@"直接帧状态发布失败（%@）", ageText];
+            return [NSString stringWithFormat:@"No se pudo publicar el estado del fotograma directo (%@)", ageText];
         case VCProducerVideoRuntimePublishedControlAndDirect:
-            return [NSString stringWithFormat:@"控制面与直接帧通道均已发布（%@）", ageText];
+            return [NSString stringWithFormat:@"Se publicaron el plano de control y el canal de fotograma directo (%@)", ageText];
         case VCProducerVideoRuntimePublishedDirectFallback:
-            return [NSString stringWithFormat:@"直接帧通道已发布，控制面不可用（%@）",
+            return [NSString stringWithFormat:@"Canal de fotograma directo publicado; plano de control no disponible (%@)",
                                               ageText];
         case VCProducerVideoRuntimePublishedControlOnly:
-            return [NSString stringWithFormat:@"控制面已发布，直接冗余通道失败（%@）",
+            return [NSString stringWithFormat:@"Plano de control publicado; falló el canal directo redundante (%@)",
                                               ageText];
         default:
-            return @"尚无 SpringBoard 共享视频发布状态";
+            return @"Aún no hay estado de publicación de video compartido de SpringBoard";
     }
 }
 
@@ -274,7 +274,7 @@ static const NSTimeInterval VCLocalMediaTrackLoadingTimeout = 30.0;
 static NSError *VCLocalMediaError(VCLocalMediaImportError code,
                                   NSString *message,
                                   NSError *underlyingError) {
-    NSMutableDictionary *userInfo = [@{NSLocalizedDescriptionKey: message ?: @"导入媒体失败。"}
+    NSMutableDictionary *userInfo = [@{NSLocalizedDescriptionKey: message ?: @"No se pudo importar el contenido multimedia."}
                                       mutableCopy];
     if (underlyingError) userInfo[NSUnderlyingErrorKey] = underlyingError;
     return [NSError errorWithDomain:VCLocalMediaImportErrorDomain code:code userInfo:userInfo];
@@ -347,13 +347,13 @@ static NSString *VCSafeLocalMediaFilename(NSURL *sourceURL,
 
 static NSString *VCPDisplaySafeFilename(NSString *filename) {
     if (![filename isKindOfClass:NSString.class] || filename.length == 0) {
-        return @"未命名媒体";
+        return @"Contenido sin nombre";
     }
     NSArray<NSString *> *parts = [filename componentsSeparatedByCharactersInSet:
         NSCharacterSet.controlCharacterSet];
     NSString *safe = [[parts componentsJoinedByString:@" "]
         stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    return safe.length > 0 ? safe : @"未命名媒体";
+    return safe.length > 0 ? safe : @"Contenido sin nombre";
 }
 
 static NSURL *VCUniqueLocalMediaDestination(NSString *directory, NSString *filename) {
@@ -401,7 +401,7 @@ static BOOL VCAssetContainsRecognizableMediaTracks(NSURL *url,
         if (errorOut) {
             *errorOut = VCLocalMediaError(
                 VCLocalMediaImportErrorTrackLoadingTimeout,
-                @"读取媒体轨道超时。若视频位于 iCloud，请等待下载完成后重试。",
+                @"Se agotó el tiempo para leer las pistas. Si el video está en iCloud, espera a que termine la descarga e inténtalo de nuevo.",
                 nil);
         }
         return NO;
@@ -409,8 +409,8 @@ static BOOL VCAssetContainsRecognizableMediaTracks(NSURL *url,
     if (result == VCMediaTrackLoadResultFailed) {
         if (errorOut) {
             NSString *message = [NSString stringWithFormat:
-                @"AVFoundation 无法读取所选文件的媒体轨道：%@",
-                loadingError.localizedDescription ?: @"未知解析错误"];
+                @"AVFoundation no puede leer las pistas del archivo seleccionado: %@",
+                loadingError.localizedDescription ?: @"Error de análisis desconocido"];
             *errorOut = VCLocalMediaError(
                 VCLocalMediaImportErrorTrackLoading,
                 message,
@@ -422,7 +422,7 @@ static BOOL VCAssetContainsRecognizableMediaTracks(NSURL *url,
         if (errorOut) {
             *errorOut = VCLocalMediaError(
                 VCLocalMediaImportErrorUnsupportedMedia,
-                @"照片返回的文件不包含可读取的视频轨道，请在照片中下载原视频后重试。",
+                @"El archivo devuelto por Fotos no contiene una pista de video legible. Descarga el video original en Fotos e inténtalo de nuevo.",
                 nil);
         }
         return NO;
@@ -431,7 +431,7 @@ static BOOL VCAssetContainsRecognizableMediaTracks(NSURL *url,
     if (errorOut) {
         *errorOut = VCLocalMediaError(
             VCLocalMediaImportErrorUnsupportedMedia,
-            @"文件已完整读取，但确认不包含视频或音频轨道。请使用 MP4/MOV（H.264/HEVC）或 M4A/MP3。",
+            @"El archivo se leyó por completo, pero no contiene pistas de video ni audio. Usa MP4/MOV (H.264/HEVC) o M4A/MP3.",
             nil);
     }
     return NO;
@@ -445,7 +445,7 @@ static NSURL *VCImportLocalMediaURL(NSURL *sourceURL,
     if (!sourceURL.isFileURL || sourceURL.path.length == 0) {
         if (errorOut) {
             *errorOut = VCLocalMediaError(VCLocalMediaImportErrorInvalidSource,
-                                          @"选择结果不是可读取的本地文件。", nil);
+                                          @"La selección no es un archivo local legible.", nil);
         }
         if (stopSecurityScopedAccess) [sourceURL stopAccessingSecurityScopedResource];
         return nil;
@@ -460,7 +460,7 @@ static NSURL *VCImportLocalMediaURL(NSURL *sourceURL,
                                       error:&directoryError]) {
         if (errorOut) {
             *errorOut = VCLocalMediaError(VCLocalMediaImportErrorCreateDirectory,
-                                          @"无法创建稳定的媒体保存目录。", directoryError);
+                                          @"No se pudo crear el directorio permanente para contenido multimedia.", directoryError);
         }
         if (stopSecurityScopedAccess) [sourceURL stopAccessingSecurityScopedResource];
         return nil;
@@ -490,13 +490,13 @@ static NSURL *VCImportLocalMediaURL(NSURL *sourceURL,
         if (!attributes) return;
         if (![attributes[NSFileType] isEqual:NSFileTypeRegular]) {
             accessError = VCLocalMediaError(VCLocalMediaImportErrorReadSource,
-                                            @"所选项目不是普通媒体文件。", nil);
+                                            @"El elemento seleccionado no es un archivo multimedia normal.", nil);
             return;
         }
         unsigned long long sourceSize = [attributes[NSFileSize] unsignedLongLongValue];
         if (sourceSize == 0) {
             accessError = VCLocalMediaError(VCLocalMediaImportErrorReadSource,
-                                            @"所选媒体文件为空。", nil);
+                                            @"El archivo multimedia seleccionado está vacío.", nil);
             return;
         }
         NSDictionary *fileSystem =
@@ -507,7 +507,7 @@ static NSURL *VCImportLocalMediaURL(NSURL *sourceURL,
             ? ULLONG_MAX : sourceSize + VCLocalMediaReserveBytes;
         if (freeBytes < requiredBytes) {
             accessError = VCLocalMediaError(VCLocalMediaImportErrorInsufficientSpace,
-                [NSString stringWithFormat:@"存储空间不足：至少需要 %.1f MiB 可用空间（含安全余量）。",
+                [NSString stringWithFormat:@"Espacio insuficiente: se necesitan al menos %.1f MiB disponibles (incluido el margen de seguridad).",
                     (double)requiredBytes / (1024.0 * 1024.0)], nil);
             return;
         }
@@ -520,7 +520,7 @@ static NSURL *VCImportLocalMediaURL(NSURL *sourceURL,
         [fileManager removeItemAtURL:stagingURL error:nil];
         if (errorOut) {
             *errorOut = VCLocalMediaError(VCLocalMediaImportErrorCopy,
-                                          @"无法把媒体复制到稳定目录。", finalError);
+                                          @"No se pudo copiar el contenido al directorio permanente.", finalError);
         }
         return nil;
     }
@@ -539,7 +539,7 @@ static NSURL *VCImportLocalMediaURL(NSURL *sourceURL,
         [fileManager removeItemAtURL:stagingURL error:nil];
         if (errorOut) {
             *errorOut = VCLocalMediaError(VCLocalMediaImportErrorFinalize,
-                                          @"媒体已经验证，但无法完成原子保存。", moveError);
+                                          @"El contenido se verificó, pero no se pudo completar el guardado atómico.", moveError);
         }
         return nil;
     }
@@ -810,7 +810,7 @@ static BOOL VCPRepairStoredPreferences(void) {
         initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh
                             target:self
                             action:@selector(refreshControlPanel:)];
-    self.navigationItem.rightBarButtonItem.accessibilityLabel = @"刷新运行状态";
+    self.navigationItem.rightBarButtonItem.accessibilityLabel = @"Actualizar estado de ejecución";
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -976,11 +976,11 @@ static BOOL VCPRepairStoredPreferences(void) {
 - (void)chooseLocalMedia:(PSSpecifier *)specifier {
     if (self.localMediaImportInProgress || self.presentedViewController) return;
 
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择本地媒体"
-                                                                    message:@"选择后会复制并验证文件，随后自动设为当前替换来源。"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Seleccionar contenido local"
+                                                                    message:@"El archivo se copiará y verificará, y después se establecerá automáticamente como fuente de reemplazo."
                                                              preferredStyle:UIAlertControllerStyleActionSheet];
     __weak VCPRootListController *weakSelf = self;
-    [sheet addAction:[UIAlertAction actionWithTitle:@"从“文件”选择视频或音频"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Elegir video o audio desde Archivos"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *action) {
         VCPRootListController *strongSelf = weakSelf;
@@ -996,7 +996,7 @@ static BOOL VCPRepairStoredPreferences(void) {
         [strongSelf presentViewController:picker animated:YES completion:nil];
     }]];
     if (@available(iOS 14.0, *)) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"从“照片”选择视频"
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Elegir video desde Fotos"
                                                  style:UIAlertActionStyleDefault
                                                handler:^(__unused UIAlertAction *action) {
             VCPRootListController *strongSelf = weakSelf;
@@ -1018,7 +1018,7 @@ static BOOL VCPRepairStoredPreferences(void) {
             [strongSelf presentViewController:picker animated:YES completion:nil];
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancelar"
                                              style:UIAlertActionStyleCancel
                                            handler:nil]];
     UIPopoverPresentationController *popover = sheet.popoverPresentationController;
@@ -1035,7 +1035,7 @@ static BOOL VCPRepairStoredPreferences(void) {
     NSString *version = [[NSBundle bundleForClass:self.class]
         objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
     return [version isKindOfClass:NSString.class] && version.length > 0
-        ? version : @"未知";
+        ? version : @"Desconocido";
 }
 
 - (id)currentNetworkEndpointSummary:(PSSpecifier *)specifier {
@@ -1044,7 +1044,7 @@ static BOOL VCPRepairStoredPreferences(void) {
         CFPreferencesCopyAppValue(CFSTR("streamURL"), VCPreferencesDomain));
     if (![value isKindOfClass:NSString.class] || [value length] == 0 ||
         [value length] > 4096) {
-        return @"尚未配置 URL";
+        return @"URL aún no configurada";
     }
     NSURL *url = [NSURL URLWithString:[value stringByTrimmingCharactersInSet:
         NSCharacterSet.whitespaceAndNewlineCharacterSet]];
@@ -1052,7 +1052,7 @@ static BOOL VCPRepairStoredPreferences(void) {
     if ((!([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"])) ||
         url.host.length == 0 || url.user.length > 0 || url.password.length > 0 ||
         url.fragment.length > 0) {
-        return @"URL 格式无效";
+        return @"Formato de URL no válido";
     }
     BOOL hls = [url.absoluteString.lowercaseString containsString:@".m3u8"];
     NSString *host = url.port
@@ -1066,22 +1066,22 @@ static BOOL VCPRepairStoredPreferences(void) {
         CFPreferencesCopyAppValue(CFSTR("sourceType"), VCPreferencesDomain));
     switch (VCPReadIntegerPreference(sourceValue, 0, 2, 0)) {
         case 1:
-            return @"设备屏幕实时镜像 · 系统方向";
+            return @"Duplicación de pantalla en tiempo real · orientación del sistema";
         case 2: {
             NSString *name = [self currentLocalMediaName:nil];
-            if ([name isEqualToString:@"尚未选择"]) {
-                return @"手机本地媒体 · 尚未选择文件";
+            if ([name isEqualToString:@"Sin seleccionar"]) {
+                return @"Contenido local del iPhone · ningún archivo seleccionado";
             }
             id pathValue = CFBridgingRelease(
                 CFPreferencesCopyAppValue(VCLocalMediaPathKey, VCPreferencesDomain));
             if (![pathValue isKindOfClass:NSString.class] ||
                 ![NSFileManager.defaultManager fileExistsAtPath:pathValue]) {
-                return [NSString stringWithFormat:@"手机本地媒体 · %@（文件不存在）", name];
+                return [NSString stringWithFormat:@"Contenido local del iPhone · %@ (el archivo no existe)", name];
             }
-            return [@"手机本地媒体 · " stringByAppendingString:name];
+            return [@"Contenido local del iPhone · " stringByAppendingString:name];
         }
         default:
-            return [@"网络流 · " stringByAppendingString:
+            return [@"Transmisión de red · " stringByAppendingString:
                 [self currentNetworkEndpointSummary:nil]];
     }
 }
@@ -1117,8 +1117,8 @@ static BOOL VCPRepairStoredPreferences(void) {
     formatter.countStyle = NSByteCountFormatterCountStyleFile;
     NSString *size = [formatter stringFromByteCount:
         totalBytes > (unsigned long long)LLONG_MAX ? LLONG_MAX : (long long)totalBytes];
-    return [NSString stringWithFormat:@"%lu 个文件 · %@",
-        (unsigned long)entries.count, size ?: @"0 字节"];
+    return [NSString stringWithFormat:@"%lu archivos · %@",
+        (unsigned long)entries.count, size ?: @"0 bytes"];
 }
 
 - (id)currentLocalMediaName:(PSSpecifier *)specifier {
@@ -1126,10 +1126,10 @@ static BOOL VCPRepairStoredPreferences(void) {
     id pathValue = CFBridgingRelease(
         CFPreferencesCopyAppValue(VCLocalMediaPathKey, VCPreferencesDomain));
     if (![pathValue isKindOfClass:NSString.class] || [pathValue length] == 0) {
-        return @"尚未选择";
+        return @"Sin seleccionar";
     }
     NSString *filename = [pathValue lastPathComponent];
-    return filename.length > 0 ? VCPDisplaySafeFilename(filename) : @"尚未选择";
+    return filename.length > 0 ? VCPDisplaySafeFilename(filename) : @"Sin seleccionar";
 }
 
 - (id)currentLocalVideoPlaylistSummary:(PSSpecifier *)specifier {
@@ -1156,17 +1156,17 @@ static BOOL VCPRepairStoredPreferences(void) {
         }
     }
     return count >= 2
-        ? [NSString stringWithFormat:@"%lu 段，可用音量 +/− 切换", (unsigned long)count]
-        : [NSString stringWithFormat:@"%lu 段，至少需要 2 段", (unsigned long)count];
+        ? [NSString stringWithFormat:@"%lu videos; usa volumen +/− para cambiar", (unsigned long)count]
+        : [NSString stringWithFormat:@"%lu videos; se necesitan al menos 2", (unsigned long)count];
 }
 
 - (id)currentLocalTransformStatus:(PSSpecifier *)specifier {
     uint64_t state = 0;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelLocalTransform, &state)) {
-        return @"SpringBoard 状态不可用";
+        return @"Estado de SpringBoard no disponible";
     }
     if (!(state & 1ULL)) {
-        return @"等待启用本地媒体";
+        return @"Esperando que se active el contenido local";
     }
     BOOL ready = (state & (1ULL << 1)) != 0;
     BOOL userMirror = (state & (1ULL << 2)) != 0;
@@ -1177,16 +1177,16 @@ static BOOL VCPRepairStoredPreferences(void) {
     NSInteger finalRotation = (trackRotation + userRotation) % 360;
     BOOL finalMirror = trackMirror != userMirror;
     return [NSString stringWithFormat:@"%@：%ld° · %@ · %@",
-        ready ? @"已应用" : @"等待首帧",
+        ready ? @"Aplicado" : @"Esperando el primer fotograma",
         (long)finalRotation,
-        finalMirror ? @"镜像" : @"不镜像",
-        aspectFill ? @"填满" : @"完整显示"];
+        finalMirror ? @"Reflejado" : @"Sin reflejo",
+        aspectFill ? @"Rellenar" : @"Mostrar completo"];
 }
 
 - (id)currentLocalVolumeHookStatus:(PSSpecifier *)specifier {
     uint64_t state = 0;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelLocalVolumeHook, &state)) {
-        return @"SpringBoard 状态不可用";
+        return @"Estado de SpringBoard no disponible";
     }
     BOOL installed = (state & VC_VOLUME_HOOK_STATUS_INSTALLED) != 0;
     BOOL buttons = (state & VC_VOLUME_HOOK_STATUS_BUTTON_PAIR) != 0;
@@ -1195,12 +1195,12 @@ static BOOL VCPRepairStoredPreferences(void) {
     uint8_t directionalCount = VCDirectionalHookCountFromStatus(state);
     uint8_t deltaCount = VCDeltaHookCountFromStatus(state);
     if (!installed) {
-        return scanComplete ? @"已扫描，未找到兼容入口；保留系统音量"
-                            : @"正在扫描 SpringBoard 音量入口";
+        return scanComplete ? @"Análisis completado; no se encontró una entrada compatible. Se conserva el volumen del sistema"
+                            : @"Buscando entradas de volumen de SpringBoard";
     }
-    NSString *route = buttons && delta ? @"按键 + 增量"
-        : (buttons ? @"音量按键" : (delta ? @"音量增量" : @"部分按键"));
-    return [NSString stringWithFormat:@"已安装：%@（方向 %u · 增量 %u）",
+    NSString *route = buttons && delta ? @"Botones + incremento"
+        : (buttons ? @"Botones de volumen" : (delta ? @"Incremento de volumen" : @"Botones parciales"));
+    return [NSString stringWithFormat:@"Instalado: %@ (dirección %u · incremento %u)",
             route, directionalCount, deltaCount];
 }
 
@@ -1208,26 +1208,26 @@ static BOOL VCPRepairStoredPreferences(void) {
     [self synchronizePreferencesIfNeeded:NO];
     id enabledValue = CFBridgingRelease(
         CFPreferencesCopyAppValue(CFSTR("enabled"), VCPreferencesDomain));
-    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"已停用";
+    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"Desactivado";
     uint64_t producerHeartbeat = 0;
     uint64_t producerAge = UINT64_MAX;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelSpringBoardRuntime,
                                   &producerHeartbeat) ||
         !VCPRuntimeTimestampAge(producerHeartbeat, &producerAge)) {
-        return @"SpringBoard 插件未注入 / 无存活信号";
+        return @"Plugin de SpringBoard no inyectado / sin señal de actividad";
     }
     if (producerAge > VC_RUNTIME_HEARTBEAT_MAX_AGE_MS) {
-        return @"SpringBoard 插件已失联，旧来源状态已忽略";
+        return @"Plugin de SpringBoard sin conexión; se ignoró el estado anterior de la fuente";
     }
     uint64_t status = VCPStreamStatusDisabled;
-    if (!VCPGetSystemStreamStatus(&status)) return @"SpringBoard 状态不可用";
+    if (!VCPGetSystemStreamStatus(&status)) return @"Estado de SpringBoard no disponible";
     switch (status) {
-        case VCPStreamStatusConnecting: return @"正在初始化 / 重连";
-        case VCPStreamStatusReceiving: return @"正在稳定产帧";
-        case VCPStreamStatusError: return @"来源错误，正在恢复";
-        case VCPStreamStatusHoldingLastFrame: return @"断流，保持最后一帧";
-        case VCPStreamStatusCompleted: return @"本地媒体播放完成";
-        default: return @"等待 SpringBoard 接管";
+        case VCPStreamStatusConnecting: return @"Inicializando / reconectando";
+        case VCPStreamStatusReceiving: return @"Produciendo fotogramas de forma estable";
+        case VCPStreamStatusError: return @"Error de la fuente; recuperando";
+        case VCPStreamStatusHoldingLastFrame: return @"Transmisión interrumpida; conservando el último fotograma";
+        case VCPStreamStatusCompleted: return @"Reproducción del contenido local completada";
+        default: return @"Esperando que SpringBoard tome el control";
     }
 }
 
@@ -1235,19 +1235,19 @@ static BOOL VCPRepairStoredPreferences(void) {
     [self synchronizePreferencesIfNeeded:NO];
     id enabledValue = CFBridgingRelease(
         CFPreferencesCopyAppValue(CFSTR("enabled"), VCPreferencesDomain));
-    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"已停用";
+    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"Desactivado";
     uint64_t heartbeat = 0;
     uint64_t heartbeatAge = UINT64_MAX;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelSpringBoardRuntime,
                                   &heartbeat) ||
         !VCPRuntimeTimestampAge(heartbeat, &heartbeatAge) ||
         heartbeatAge > VC_RUNTIME_HEARTBEAT_MAX_AGE_MS) {
-        return @"SpringBoard 无存活信号，发布状态已忽略";
+        return @"SpringBoard no tiene señal de actividad; se ignoró el estado de publicación";
     }
     uint64_t runtimeState = 0;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelProducerVideoRuntime,
                                   &runtimeState) || runtimeState == 0) {
-        return @"SpringBoard 存活，但尚未报告共享视频发布";
+        return @"SpringBoard está activo, pero aún no informó una publicación de video compartido";
     }
     return VCPProducerVideoRuntimeDescription(runtimeState);
 }
@@ -1256,28 +1256,28 @@ static BOOL VCPRepairStoredPreferences(void) {
     [self synchronizePreferencesIfNeeded:NO];
     id enabledValue = CFBridgingRelease(
         CFPreferencesCopyAppValue(CFSTR("enabled"), VCPreferencesDomain));
-    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"已停用";
+    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"Desactivado";
     uint64_t mediaServerHeartbeat = 0;
     uint64_t mediaServerAge = UINT64_MAX;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelMediaServerRuntime,
                                   &mediaServerHeartbeat) ||
         !VCPRuntimeTimestampAge(mediaServerHeartbeat, &mediaServerAge)) {
-        return @"mediaserverd 插件未注入 / 无存活信号";
+        return @"Plugin de mediaserverd no inyectado / sin señal de actividad";
     }
     if (mediaServerAge > VC_RUNTIME_HEARTBEAT_MAX_AGE_MS) {
-        return @"mediaserverd 插件已失联，旧管线状态已忽略";
+        return @"Plugin de mediaserverd sin conexión; se ignoró el estado anterior de la canalización";
     }
     uint64_t timestamp = 0;
     uint64_t replacementAge = UINT64_MAX;
     if (VCPGetNotifyChannelState(VCPNotifyChannelVideoPipeline, &timestamp) &&
         VCPRuntimeTimestampAge(timestamp, &replacementAge) &&
         replacementAge <= 1500) {
-        return @"mediaserverd 最近已替换视频";
+        return @"mediaserverd reemplazó video recientemente";
     }
     uint64_t runtimeState = 0;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelMediaServerVideoRuntime,
                                   &runtimeState) || runtimeState == 0) {
-        return @"mediaserverd 存活，但尚未报告 Hook 阶段";
+        return @"mediaserverd está activo, pero aún no informó la etapa del hook";
     }
     return VCPMediaServerVideoRuntimeDescription(runtimeState);
 }
@@ -1286,11 +1286,11 @@ static BOOL VCPRepairStoredPreferences(void) {
     [self synchronizePreferencesIfNeeded:NO];
     id enabledValue = CFBridgingRelease(
         CFPreferencesCopyAppValue(CFSTR("enabled"), VCPreferencesDomain));
-    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"已停用";
+    if (!VCPReadBooleanPreference(enabledValue, NO)) return @"Desactivado";
     uint64_t runtimeState = 0;
     if (!VCPGetNotifyChannelState(VCPNotifyChannelApplicationVideoRuntime,
                                   &runtimeState) || runtimeState == 0) {
-        return @"尚无 AVFoundation Hook 活动；请先打开一次相机应用";
+        return @"Aún no hay actividad del hook de AVFoundation; abre primero una aplicación de cámara";
     }
     return VCPApplicationVideoRuntimeDescription(runtimeState);
 }
@@ -1301,8 +1301,8 @@ static BOOL VCPRepairStoredPreferences(void) {
                              (__bridge CFStringRef)token,
                              VCPreferencesDomain);
     if (!CFPreferencesAppSynchronize(VCPreferencesDomain)) {
-        [self showLocalMediaResultWithTitle:@"重载失败"
-                                    message:@"内部重载代次无法保存，请稍后重试。"];
+        [self showLocalMediaResultWithTitle:@"Error al recargar"
+                                    message:@"No se pudo guardar la generación interna de recarga. Inténtalo de nuevo más tarde."];
         return;
     }
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1310,24 +1310,24 @@ static BOOL VCPRepairStoredPreferences(void) {
                                          NULL, NULL, YES);
     _specifiers = nil;
     [self reloadSpecifiers];
-    [self showLocalMediaResultWithTitle:@"已请求重载"
-                                message:@"SpringBoard 正在原子停止并重建当前来源；URL、本地文件和画面参数均保持不变。"];
+    [self showLocalMediaResultWithTitle:@"Recarga solicitada"
+                                message:@"SpringBoard está deteniendo y reconstruyendo atómicamente la fuente actual; la URL, los archivos locales y los parámetros de imagen no cambiarán."];
 }
 
 - (void)showCurrentSourceGuide:(PSSpecifier *)specifier {
     [self synchronizePreferencesIfNeeded:YES];
     id sourceValue = CFBridgingRelease(
         CFPreferencesCopyAppValue(CFSTR("sourceType"), VCPreferencesDomain));
-    NSString *title = @"网络流使用顺序";
-    NSString *message = @"1. 在 Windows 控制中心启动 OBS 桥接。\n2. 填写手机可访问的 HTTP/HTTPS URL。\n3. 点击“检测当前网络流”。\n4. 启用替换并重新打开相机应用。\n\n网络方向、帧率和质量全部由 OBS/发送端决定；手机保留原生麦克风。";
+    NSString *title = @"Cómo usar una transmisión de red";
+    NSString *message = @"1. Inicia el puente de OBS en el centro de control de Windows.\n2. Escribe una URL HTTP/HTTPS accesible desde el iPhone.\n3. Pulsa «Probar transmisión actual».\n4. Activa el reemplazo y vuelve a abrir la aplicación de cámara.\n\nLa orientación, la frecuencia de fotogramas y la calidad dependen de OBS o del emisor; el iPhone conserva su micrófono nativo.";
     switch (VCPReadIntegerPreference(sourceValue, 0, 2, 0)) {
         case 1:
-            title = @"屏幕镜像使用顺序";
-            message = @"1. 选择设备屏幕实时镜像。\n2. 启用系统摄像头替换。\n3. 打开目标相机应用。\n\n屏幕方向和刷新节奏自动跟随设备；本地视频的旋转、镜像、FPS 和质量设置不会作用于屏幕来源。";
+            title = @"Cómo usar la duplicación de pantalla";
+            message = @"1. Selecciona la duplicación de pantalla del dispositivo.\n2. Activa el reemplazo de la cámara del sistema.\n3. Abre la aplicación de cámara de destino.\n\nLa orientación y la frecuencia de actualización siguen automáticamente al dispositivo; la rotación, el reflejo, los FPS y la calidad del video local no afectan esta fuente.";
             break;
         case 2:
-            title = @"本地媒体使用顺序";
-            message = @"1. 点击“选择本地视频 / 音频”完成导入。\n2. 调整本地视频专用的旋转、镜像、FPS 和质量。\n3. 启用替换并打开相机应用。\n\n同一目录至少有两段视频时，音量加/减可切换下一段/上一段；纯音频文件只替换麦克风。";
+            title = @"Cómo usar contenido local";
+            message = @"1. Pulsa «Seleccionar video/audio local» para importar.\n2. Ajusta la rotación, el reflejo, los FPS y la calidad del video local.\n3. Activa el reemplazo y abre la aplicación de cámara.\n\nSi hay al menos dos videos en el mismo directorio, volumen +/− cambia al siguiente o anterior; los archivos de solo audio reemplazan únicamente el micrófono.";
             break;
         default:
             break;
@@ -1353,23 +1353,23 @@ static BOOL VCPRepairStoredPreferences(void) {
             marker, displayName, size ?: @""]];
     }
     if (entries.count > visibleCount) {
-        [lines addObject:[NSString stringWithFormat:@"…另有 %lu 个文件",
+        [lines addObject:[NSString stringWithFormat:@"…y %lu archivos más",
             (unsigned long)(entries.count - visibleCount)]];
     }
     NSString *message = entries.count > 0
         ? [lines componentsJoinedByString:@"\n"]
-        : @"媒体库目前为空。请使用“选择本地视频 / 音频”导入文件。";
+        : @"La biblioteca está vacía. Usa «Seleccionar video/audio local» para importar archivos.";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:
-        [NSString stringWithFormat:@"本地媒体库 · %@",
+        [NSString stringWithFormat:@"Biblioteca local · %@",
             [self currentLocalMediaLibrarySummary:nil]]
                                                                     message:message
                                                              preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"复制媒体目录"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Copiar ruta de la biblioteca"
                                              style:UIAlertActionStyleDefault
                                            handler:^(__unused UIAlertAction *action) {
         UIPasteboard.generalPasteboard.string = VCLocalMediaDirectory;
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"关闭"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cerrar"
                                              style:UIAlertActionStyleCancel
                                            handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -1446,21 +1446,21 @@ static BOOL VCPRepairStoredPreferences(void) {
         hold ? @"yes" : @"no",
         @(staleTimeout)];
     UIPasteboard.generalPasteboard.string = report;
-    [self showLocalMediaResultWithTitle:@"诊断信息已复制"
-                                message:@"已复制运行状态和安全化来源摘要；网络 URL 的查询参数和访问令牌不会写入诊断文本。"];
+    [self showLocalMediaResultWithTitle:@"Diagnóstico copiado"
+                                message:@"Se copiaron el estado de ejecución y un resumen protegido de la fuente; los parámetros de consulta y tokens de acceso de la URL no se incluyen."];
 }
 
 - (void)clearLocalMedia:(PSSpecifier *)specifier {
     if (self.localMediaImportInProgress) {
-        [self showLocalMediaResultWithTitle:@"正在导入"
-                                    message:@"请等待当前媒体完成复制和验证后再清除。"];
+        [self showLocalMediaResultWithTitle:@"Importación en curso"
+                                    message:@"Espera a que termine la copia y verificación antes de borrar la selección."];
         return;
     }
     CFPreferencesSetAppValue(VCLocalMediaPathKey, NULL, VCPreferencesDomain);
     BOOL synchronized = CFPreferencesAppSynchronize(VCPreferencesDomain);
     if (!synchronized) {
-        [self showLocalMediaResultWithTitle:@"清除失败"
-                                    message:@"设置暂时无法保存，请稍后重试。"];
+        [self showLocalMediaResultWithTitle:@"No se pudo borrar"
+                                    message:@"La configuración no se puede guardar en este momento. Inténtalo más tarde."];
         return;
     }
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
@@ -1468,8 +1468,8 @@ static BOOL VCPRepairStoredPreferences(void) {
                                          NULL, NULL, YES);
     _specifiers = nil;
     [self reloadSpecifiers];
-    [self showLocalMediaResultWithTitle:@"已清除当前选择"
-                                message:@"已导入的文件仍保留在媒体目录中，不会被自动删除。"];
+    [self showLocalMediaResultWithTitle:@"Selección actual eliminada"
+                                message:@"Los archivos importados permanecen en el directorio y no se eliminan automáticamente."];
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller
@@ -1524,12 +1524,12 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
             return [result.itemProvider hasItemConformingToTypeIdentifier:@"public.movie"];
         }] != NSNotFound;
         if (!containsVideo) {
-            [strongSelf showLocalMediaResultWithTitle:@"无法读取视频"
-                                               message:@"照片选择结果不包含可导入的视频文件。"];
+            [strongSelf showLocalMediaResultWithTitle:@"No se pudo leer el video"
+                                               message:@"La selección de Fotos no contiene ningún video que se pueda importar."];
             return;
         }
         strongSelf.localMediaImportInProgress = YES;
-        [strongSelf showLocalMediaImportProgressWithMessage:@"正在从“照片”读取、复制并验证视频…"
+        [strongSelf showLocalMediaImportProgressWithMessage:@"Leyendo, copiando y verificando videos desde Fotos…"
                                                  completion:^{
             NSMutableArray *orderedURLs = [NSMutableArray arrayWithCapacity:results.count];
             NSMutableArray *orderedErrors = [NSMutableArray arrayWithCapacity:results.count];
@@ -1546,7 +1546,7 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
                     @synchronized (orderedURLs) {
                         orderedErrors[index] = VCLocalMediaError(
                             VCLocalMediaImportErrorReadSource,
-                            @"一个照片项目不包含视频文件。", nil);
+                            @"Uno de los elementos de Fotos no contiene un archivo de video.", nil);
                     }
                     return;
                 }
@@ -1569,7 +1569,7 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
                     }
                     if (!url && !importError) {
                         importError = VCLocalMediaError(VCLocalMediaImportErrorReadSource,
-                            @"照片没有返回可读取的视频文件。", nil);
+                            @"Fotos no devolvió un archivo de video legible.", nil);
                     }
                     @synchronized (orderedURLs) {
                         if (importedURL) orderedURLs[index] = importedURL;
@@ -1613,7 +1613,7 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
     }
     self.localMediaImportInProgress = YES;
     __weak VCPRootListController *weakSelf = self;
-    [self showLocalMediaImportProgressWithMessage:@"正在复制并验证媒体，请稍候…"
+    [self showLocalMediaImportProgressWithMessage:@"Copiando y verificando el contenido; espera…"
                                        completion:^{
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             NSMutableArray<NSURL *> *importedURLs = [NSMutableArray array];
@@ -1641,7 +1641,7 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
 
 - (void)showLocalMediaImportProgressWithMessage:(NSString *)message
                                       completion:(dispatch_block_t)completion {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"正在导入本地媒体"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Importando contenido local"
                                                                     message:message
                                                              preferredStyle:UIAlertControllerStyleAlert];
     UIActivityIndicatorView *indicator = nil;
@@ -1678,8 +1678,8 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
 
     NSURL *url = urls.firstObject;
     NSError *error = errors.firstObject;
-    NSString *title = @"导入失败";
-    NSString *message = error.localizedDescription ?: @"无法导入所选媒体。";
+    NSString *title = @"Error de importación";
+    NSString *message = error.localizedDescription ?: @"No se pudo importar el contenido seleccionado.";
     if (url) {
         CFPreferencesSetAppValue(VCLocalMediaPathKey,
                                  (__bridge CFPropertyListRef)url.path,
@@ -1690,22 +1690,22 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
                                                  NULL, NULL, YES);
             _specifiers = nil;
             [self reloadSpecifiers];
-            title = urls.count > 1 ? @"本地视频播放列表已就绪" : @"本地媒体已就绪";
+            title = urls.count > 1 ? @"Lista de videos locales lista" : @"Contenido local listo";
             message = urls.count > 1
                 ? [NSString stringWithFormat:
-                    @"已成功导入 %lu 个媒体文件，当前从 %@ 开始。音量加/减可切换稳定目录中的下一段/上一段视频。%@",
+                    @"Se importaron %lu archivos correctamente; la reproducción comienza con %@. Volumen +/− cambia al video siguiente o anterior del directorio permanente.%@",
                     (unsigned long)urls.count,
                     url.lastPathComponent,
                     errors.count > 0
-                        ? [NSString stringWithFormat:@"\n\n另有 %lu 个文件导入失败。",
+                        ? [NSString stringWithFormat:@"\n\nNo se pudieron importar otros %lu archivos.",
                             (unsigned long)errors.count] : @""]
-                : [NSString stringWithFormat:@"已选择：%@\n\n稳定路径：%@%@",
+                : [NSString stringWithFormat:@"Seleccionado: %@\n\nRuta permanente: %@%@",
                     url.lastPathComponent,
                     url.path,
-                    errors.count > 0 ? @"\n\n其余选择项导入失败。" : @""];
+                    errors.count > 0 ? @"\n\nNo se pudieron importar los demás elementos seleccionados." : @""];
         } else {
-            title = @"媒体已复制，但设置保存失败";
-            message = [NSString stringWithFormat:@"文件保存在 %@，请重新选择一次。", url.path];
+            title = @"El contenido se copió, pero no se guardó la configuración";
+            message = [NSString stringWithFormat:@"El archivo se guardó en %@. Vuelve a seleccionarlo.", url.path];
         }
     }
 
@@ -1723,7 +1723,7 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                     message:message
                                                              preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Aceptar"
                                              style:UIAlertActionStyleDefault
                                            handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -1745,8 +1745,8 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
         : @"";
     NSURL *streamURL = [NSURL URLWithString:trimmedValue];
     if (VCPReadIntegerPreference(sourceTypeValue, 0, 2, 0) != 0) {
-        [self showStreamTestResultWithTitle:@"当前不是网络来源"
-                                   message:@"请将“替换来源”切换为网络 HLS / MJPEG 后再检测 URL。屏幕和本地媒体由 SpringBoard 本地读取，不建立网络连接。"];
+        [self showStreamTestResultWithTitle:@"La fuente actual no es de red"
+                                   message:@"Cambia «Fuente de reemplazo» a HLS/MJPEG de red antes de probar la URL. SpringBoard lee localmente la pantalla y el contenido del dispositivo sin crear una conexión de red."];
         return;
     }
     NSString *scheme = streamURL.scheme.lowercaseString;
@@ -1754,8 +1754,8 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
         streamURL.host.length == 0 || streamURL.user.length > 0 ||
         streamURL.password.length > 0 || streamURL.fragment.length > 0 ||
         streamURL.absoluteString.length > 4096) {
-        [self showStreamTestResultWithTitle:@"URL 无效"
-                                   message:@"请先填写完整的 HTTP/HTTPS 网络流 URL。"];
+        [self showStreamTestResultWithTitle:@"URL no válida"
+                                   message:@"Escribe primero una URL HTTP/HTTPS completa para la transmisión."];
         return;
     }
 
@@ -1764,24 +1764,24 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
         VCPGetSystemStreamStatus(&status);
         switch (status) {
             case VCPStreamStatusReceiving:
-                [self showStreamTestResultWithTitle:@"网络流可用"
-                                           message:@"SpringBoard 媒体服务正在接收有效网络帧；无需建立第二条测试连接。"];
+                [self showStreamTestResultWithTitle:@"Transmisión disponible"
+                                           message:@"El servicio multimedia de SpringBoard está recibiendo fotogramas válidos; no es necesario abrir una segunda conexión de prueba."];
                 return;
             case VCPStreamStatusConnecting:
-                [self showStreamTestResultWithTitle:@"正在连接"
-                                           message:@"SpringBoard 媒体服务正在连接当前 URL。请确认 Windows 桥接已启动，稍后再检测。"];
+                [self showStreamTestResultWithTitle:@"Conectando"
+                                           message:@"El servicio multimedia de SpringBoard está conectándose a la URL actual. Confirma que el puente de Windows esté activo e inténtalo de nuevo más tarde."];
                 return;
             case VCPStreamStatusError:
-                [self showStreamTestResultWithTitle:@"连接需要恢复"
-                                           message:@"SpringBoard 媒体服务已检测到断流并正在自动重连。请检查 Windows 桥接、IP 与防火墙。"];
+                [self showStreamTestResultWithTitle:@"La conexión necesita recuperarse"
+                                           message:@"El servicio multimedia de SpringBoard detectó una interrupción y está reconectando automáticamente. Revisa el puente de Windows, la IP y el firewall."];
                 return;
             case VCPStreamStatusHoldingLastFrame:
-                [self showStreamTestResultWithTitle:@"正在保持最后一帧"
-                                           message:@"网络连接正在恢复，系统相机仍输出最后收到的替换帧；请检查 Windows 桥接和网络稳定性。"];
+                [self showStreamTestResultWithTitle:@"Conservando el último fotograma"
+                                           message:@"La conexión de red se está recuperando; la cámara del sistema sigue mostrando el último fotograma recibido. Revisa el puente de Windows y la estabilidad de la red."];
                 return;
             default:
-                [self showStreamTestResultWithTitle:@"媒体服务尚未接管"
-                                           message:@"替换已启用，但 SpringBoard 尚未报告来源状态。请确认 SpringBoard 注入成功并检查系统日志。"];
+                [self showStreamTestResultWithTitle:@"El servicio multimedia aún no tomó el control"
+                                           message:@"El reemplazo está activado, pero SpringBoard aún no informó el estado de la fuente. Confirma que la inyección se haya completado y revisa el registro del sistema."];
                 return;
         }
     }
@@ -1794,7 +1794,7 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
     self.streamTestData = [NSMutableData data];
     _streamTestJPEGOffset = NSNotFound;
     VCJPEGParserReset(&_streamTestJPEGParserState);
-    self.streamTestResponseSummary = @"服务器已响应";
+    self.streamTestResponseSummary = @"El servidor respondió";
     self.streamTestSession = [NSURLSession sessionWithConfiguration:configuration
                                                            delegate:self
                                                       delegateQueue:[NSOperationQueue mainQueue]];
@@ -1803,14 +1803,14 @@ didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
    forHTTPHeaderField:@"Accept"];
     self.streamTestTask = [self.streamTestSession dataTaskWithRequest:request];
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"正在检测网络流"
-                                                                    message:@"等待服务器返回有效画面数据…"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Probando la transmisión de red"
+                                                                    message:@"Esperando datos de video válidos del servidor…"
                                                              preferredStyle:UIAlertControllerStyleAlert];
     __weak VCPRootListController *weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancelar"
                                              style:UIAlertActionStyleCancel
                                            handler:^(__unused UIAlertAction *action) {
-        [weakSelf finishStreamTestWithTitle:@"已取消" message:@"网络流检测已取消。"];
+        [weakSelf finishStreamTestWithTitle:@"Cancelado" message:@"Se canceló la prueba de la transmisión."];
     }]];
     self.streamTestAlert = alert;
     [self presentViewController:alert animated:YES completion:nil];
@@ -1829,21 +1829,21 @@ didReceiveResponse:(NSURLResponse *)response
         ? (NSHTTPURLResponse *)response : nil;
     if (httpResponse && (httpResponse.statusCode < 200 || httpResponse.statusCode >= 300)) {
         completionHandler(NSURLSessionResponseCancel);
-        [self finishStreamTestWithTitle:@"连接失败"
-                                message:[NSString stringWithFormat:@"服务器返回 HTTP %ld。",
+        [self finishStreamTestWithTitle:@"Error de conexión"
+                                message:[NSString stringWithFormat:@"El servidor devolvió HTTP %ld.",
                                          (long)httpResponse.statusCode]];
         return;
     }
-    NSString *mimeType = response.MIMEType.lowercaseString ?: @"未知类型";
+    NSString *mimeType = response.MIMEType.lowercaseString ?: @"Tipo desconocido";
     if ([mimeType isEqualToString:@"text/html"] ||
         [mimeType isEqualToString:@"application/json"]) {
         completionHandler(NSURLSessionResponseCancel);
-        [self finishStreamTestWithTitle:@"内容类型不正确"
-                                message:[NSString stringWithFormat:@"服务器返回 %@，不是视频流。",
+        [self finishStreamTestWithTitle:@"Tipo de contenido incorrecto"
+                                message:[NSString stringWithFormat:@"El servidor devolvió %@, que no es una transmisión de video.",
                                          mimeType]];
         return;
     }
-    self.streamTestResponseSummary = [NSString stringWithFormat:@"HTTP 连接正常，内容类型：%@", mimeType];
+    self.streamTestResponseSummary = [NSString stringWithFormat:@"Conexión HTTP correcta; tipo de contenido: %@", mimeType];
     completionHandler(NSURLSessionResponseAllow);
 }
 
@@ -1908,12 +1908,12 @@ didReceiveResponse:(NSURLResponse *)response
                                                   range:range].location != NSNotFound;
     if (containsJPEG || containsHLS) {
         NSString *format = containsJPEG ? @"MJPEG/JPEG" : @"HLS";
-        [self finishStreamTestWithTitle:@"网络流可用"
-                                message:[NSString stringWithFormat:@"%@；已收到有效 %@ 数据。",
+        [self finishStreamTestWithTitle:@"Transmisión disponible"
+                                message:[NSString stringWithFormat:@"%@; se recibieron datos %@ válidos.",
                                          self.streamTestResponseSummary, format]];
     } else if (self.streamTestData.length >= VCPStreamTestMaximumBytes) {
-        [self finishStreamTestWithTitle:@"未识别到画面"
-                                message:@"服务器可连接，但前 8 MiB 中没有完整 JPEG 或 HLS 标记。"];
+        [self finishStreamTestWithTitle:@"No se detectó video"
+                                message:@"El servidor es accesible, pero los primeros 8 MiB no contienen un JPEG completo ni marcadores HLS."];
     }
 }
 
@@ -1921,8 +1921,8 @@ didReceiveResponse:(NSURLResponse *)response
               task:(NSURLSessionTask *)task
 didCompleteWithError:(NSError *)error {
     if (session != self.streamTestSession || task != self.streamTestTask) return;
-    NSString *message = error.localizedDescription ?: @"服务器在返回画面前关闭了连接。";
-    [self finishStreamTestWithTitle:@"连接失败" message:message];
+    NSString *message = error.localizedDescription ?: @"El servidor cerró la conexión antes de devolver video.";
+    [self finishStreamTestWithTitle:@"Error de conexión" message:message];
 }
 
 - (void)finishStreamTestWithTitle:(NSString *)title message:(NSString *)message {
@@ -1954,7 +1954,7 @@ didCompleteWithError:(NSError *)error {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                     message:message
                                                              preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Aceptar"
                                              style:UIAlertActionStyleDefault
                                            handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
