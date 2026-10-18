@@ -7,6 +7,7 @@
 #import "VCScreenCaptureSource.h"
 #import "VCSharedMediaBus.h"
 #import <float.h>
+#import <IOSurface/IOSurfaceRef.h>
 #import <notify.h>
 #import <os/lock.h>
 
@@ -52,6 +53,9 @@ typedef NS_ENUM(uint64_t, VCStreamStatus) {
     uint64_t _publishedStreamStatus;
     BOOL _loggedFirstFrame;
     BOOL _loggedStaleFrame;
+    CVPixelBufferRef _consumerFallbackPixelBuffer;
+    uint64_t _consumerFallbackTimestampMilliseconds;
+    BOOL _loggedConsumerFallbackFrame;
     CFAbsoluteTime _lastVolumeButtonActionTime;
 }
 @property (nonatomic, strong) AVAssetStreamAdapter *networkSource;
@@ -63,6 +67,9 @@ typedef NS_ENUM(uint64_t, VCStreamStatus) {
 @property (nonatomic, strong) dispatch_queue_t frameProcessingQueue;
 @property (nonatomic, strong) dispatch_source_t memoryPressureSource;
 - (void)clearPendingFrames;
+- (void)stopConsumerNetworkFallback;
+- (void)storeConsumerFallbackPixelBuffer:(CVPixelBufferRef)pixelBuffer
+                         sourceGeneration:(NSUInteger)sourceGeneration;
 - (BOOL)sourceGenerationIsCurrent:(NSUInteger)generation;
 - (void)producerFailedWithError:(NSError *)error
                sourceGeneration:(NSUInteger)sourceGeneration;
@@ -353,7 +360,61 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
     if (_producerProcess) {
         [self publishLocalTransformStatusReady:NO trackRotation:0 trackMirror:NO];
     }
-    if (!_producerProcess) return;
+    if (!_producerProcess) {
+        // Global IOSurface lookup is denied between SpringBoard and some
+        // sandboxed iOS 15 camera processes even when the producer requested a
+        // global surface. HLS is intentionally multi-client, so those consumers
+        // can decode the same Windows stream locally without competing for the
+        // single MJPEG listener connection.
+        BOOL supportsDirectFallback = enabled &&
+            sourceType == VCSourceTypeNetwork &&
+            [networkURL.pathExtension.lowercaseString isEqualToString:@"m3u8"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            os_unfair_lock_lock(&self->_stateLock);
+            BOOL current = preferenceGeneration == self->_preferencesGeneration;
+            os_unfair_lock_unlock(&self->_stateLock);
+            if (!current) return;
+
+            NSString *fallbackIdentity = supportsDirectFallback
+                ? [@"consumer-hls:" stringByAppendingString:networkURL.absoluteString]
+                : nil;
+            if (fallbackIdentity.length > 0 &&
+                [self.activeSourceIdentity isEqualToString:fallbackIdentity] &&
+                self.networkSource) {
+                return;
+            }
+
+            [self stopConsumerNetworkFallback];
+            if (!supportsDirectFallback) return;
+
+            self.activeSourceIdentity = fallbackIdentity;
+            os_unfair_lock_lock(&self->_stateLock);
+            NSUInteger sourceGeneration = ++self->_sourceGeneration;
+            self->_loggedConsumerFallbackFrame = NO;
+            os_unfair_lock_unlock(&self->_stateLock);
+
+            AVAssetStreamAdapter *source = [[AVAssetStreamAdapter alloc]
+                                             initWithURL:networkURL];
+            __weak VCStreamCoordinator *weakSelf = self;
+            source.pixelBufferCallback = ^(CVPixelBufferRef pixelBuffer) {
+                [weakSelf storeConsumerFallbackPixelBuffer:pixelBuffer
+                                          sourceGeneration:sourceGeneration];
+            };
+            source.errorCallback = ^(NSError *error) {
+                VCStreamCoordinator *strongSelf = weakSelf;
+                if (!strongSelf ||
+                    ![strongSelf sourceGenerationIsCurrent:sourceGeneration]) return;
+                NSLog(@"[VirtualCamPro] Consumer HLS fallback error in %@: %@",
+                      NSProcessInfo.processInfo.processName,
+                      error.localizedDescription);
+            };
+            self.networkSource = source;
+            [source startStreaming];
+            NSLog(@"[VirtualCamPro] Consumer HLS fallback started in %@",
+                  NSProcessInfo.processInfo.processName);
+        });
+        return;
+    }
 
     dispatch_async(dispatch_get_main_queue(), ^{
         os_unfair_lock_lock(&self->_stateLock);
@@ -732,6 +793,50 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
     VCResetFrameConverterCache();
 }
 
+- (void)stopConsumerNetworkFallback {
+    if (_producerProcess) return;
+    AVAssetStreamAdapter *network = self.networkSource;
+    self.networkSource = nil;
+    self.activeSourceIdentity = nil;
+    CVPixelBufferRef retired = NULL;
+    os_unfair_lock_lock(&_stateLock);
+    _sourceGeneration++;
+    retired = _consumerFallbackPixelBuffer;
+    _consumerFallbackPixelBuffer = NULL;
+    _consumerFallbackTimestampMilliseconds = 0;
+    _loggedConsumerFallbackFrame = NO;
+    os_unfair_lock_unlock(&_stateLock);
+    network.pixelBufferCallback = nil;
+    network.errorCallback = nil;
+    [network stopStreaming];
+    if (retired) CVPixelBufferRelease(retired);
+}
+
+- (void)storeConsumerFallbackPixelBuffer:(CVPixelBufferRef)pixelBuffer
+                         sourceGeneration:(NSUInteger)sourceGeneration {
+    if (!pixelBuffer) return;
+    CVPixelBufferRef retained = CVPixelBufferRetain(pixelBuffer);
+    CVPixelBufferRef retired = NULL;
+    BOOL logFirstFrame = NO;
+    os_unfair_lock_lock(&_stateLock);
+    if (!_producerProcess && _replacementEnabled &&
+        sourceGeneration == _sourceGeneration) {
+        retired = _consumerFallbackPixelBuffer;
+        _consumerFallbackPixelBuffer = retained;
+        _consumerFallbackTimestampMilliseconds = VCMonotonicMilliseconds();
+        logFirstFrame = !_loggedConsumerFallbackFrame;
+        _loggedConsumerFallbackFrame = YES;
+        retained = NULL;
+    }
+    os_unfair_lock_unlock(&_stateLock);
+    if (retired) CVPixelBufferRelease(retired);
+    if (retained) CVPixelBufferRelease(retained);
+    if (logFirstFrame) {
+        NSLog(@"[VirtualCamPro] Consumer HLS fallback received its first frame in %@",
+              NSProcessInfo.processInfo.processName);
+    }
+}
+
 - (CVPixelBufferRef)copyLatestPixelBuffer {
     return [self copyLatestPixelBufferWithAspectFill:NULL preferredFPS:NULL];
 }
@@ -758,6 +863,30 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
     NSTimeInterval maximumAge = hold ? 365.0 * 24.0 * 60.0 * 60.0 : staleTimeout;
     CVPixelBufferRef result = [[VCSharedVideoClient sharedClient]
         copyLatestPixelBufferWithMaximumAge:maximumAge];
+    if (!result && !_producerProcess) {
+        CVPixelBufferRef local = NULL;
+        uint64_t localTimestamp = 0;
+        os_unfair_lock_lock(&_stateLock);
+        local = _consumerFallbackPixelBuffer
+            ? CVPixelBufferRetain(_consumerFallbackPixelBuffer) : NULL;
+        localTimestamp = _consumerFallbackTimestampMilliseconds;
+        os_unfair_lock_unlock(&_stateLock);
+        BOOL localIsFresh = local && (hold || VCSharedTimestampIsRecent(
+            VCMonotonicMilliseconds(), localTimestamp,
+            (uint64_t)MAX(1.0, staleTimeout * 1000.0)));
+        if (localIsFresh) {
+            IOSurfaceRef surface = CVPixelBufferGetIOSurface(local);
+            if (surface) {
+                // Match the ownership contract of the shared-bus return path so
+                // every existing caller can continue using the symmetric
+                // VCReleaseSharedVideoPixelBuffer helper.
+                IOSurfaceIncrementUseCount(surface);
+                result = local;
+                local = NULL;
+            }
+        }
+        if (local) CVPixelBufferRelease(local);
+    }
     if (!result && !hold) {
         os_unfair_lock_lock(&_stateLock);
         logStale = !_loggedStaleFrame;
@@ -826,6 +955,7 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
 }
 
 - (void)dealloc {
+    [self stopConsumerNetworkFallback];
     CFNotificationCenterRemoveEveryObserver(CFNotificationCenterGetDarwinNotifyCenter(),
                                             (__bridge const void *)self);
     if (_producerProcess) [self stopAllSourcesAndInvalidateBus];

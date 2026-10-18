@@ -581,8 +581,23 @@ def validate_zero_copy_bus() -> None:
     )
     if "producerFailedWithError:error];" in coordinator:
         fail("producer errors must be generation-gated after a source switch")
-    if "initWithURL:" in coordinator.split("if (!_producerProcess) return;", 1)[0]:
-        fail("a consumer path can still instantiate a network decoder")
+    require(
+        coordinator,
+        (
+            "supportsDirectFallback",
+            'isEqualToString:@"m3u8"',
+            "stopConsumerNetworkFallback",
+            "storeConsumerFallbackPixelBuffer:",
+            "Consumer HLS fallback received its first frame",
+            "IOSurfaceIncrementUseCount(surface)",
+        ),
+        "sandbox-safe consumer HLS fallback",
+    )
+    consumer_fallback = coordinator.split("if (!_producerProcess) {", 1)[1].split(
+        "dispatch_async(dispatch_get_main_queue()", 1
+    )[0]
+    if "m3u8" not in consumer_fallback or "mjpg" in consumer_fallback:
+        fail("consumer network fallback must remain restricted to multi-client HLS")
     require(
         network,
         (
