@@ -313,10 +313,11 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
     }
 
     // Network frames are already authored by the sender. Screen capture follows
-    // the display. Only local files are transformed/rate-limited/resized here.
+    // the display. Only local files are transformed/resized here, while the FPS
+    // preference still describes network timing to preview and replacement
+    // consumers.
     BOOL localMediaControlsActive = sourceType == VCSourceTypeLocalMedia;
-    NSInteger effectiveFPS = localMediaControlsActive ? fps
-        : (sourceType == VCSourceTypeNetwork ? 240 : 60);
+    NSInteger effectiveFPS = sourceType == VCSourceTypeScreen ? 60 : fps;
     CGFloat effectiveJPEGQuality = localMediaControlsActive ? jpegQuality : 1.0;
     BOOL effectiveAspectFill = localMediaControlsActive ? aspectFill : YES;
     NSInteger effectiveRotation = localMediaControlsActive ? rotation : 0;

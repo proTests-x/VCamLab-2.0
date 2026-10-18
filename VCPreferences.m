@@ -24,6 +24,7 @@ NSString * const VCFloatingControlCenterXKey = @"floatingControlCenterX";
 NSString * const VCFloatingControlCenterYKey = @"floatingControlCenterY";
 
 static NSString * const VCLegacyPreferencesPath = @"/var/mobile/Library/Preferences/com.apple.avfoundation.cs.plist";
+static NSString * const VCPreferencesPath = @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
 
 @interface VCPreferences ()
 @property (atomic, assign, readwrite, getter=isEnabled) BOOL enabled;
@@ -86,6 +87,13 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
 - (BOOL)reload {
     CFPreferencesAppSynchronize((__bridge CFStringRef)VCPreferencesDomain);
 
+    // Injected applications can resolve an arbitrary CFPreferences domain
+    // inside their own container instead of the mobile user's global domain.
+    // SpringBoard writes the canonical file, so use it as a read-only fallback
+    // whenever the process-local preferences search list has no value.
+    NSDictionary *directPreferences =
+        [NSDictionary dictionaryWithContentsOfFile:VCPreferencesPath];
+
     id enabledValue = VCReadPreference(VCEnabledKey);
     id streamValue = VCReadPreference(VCStreamURLKey);
     id fpsValue = VCReadPreference(VCPreferredFPSKey);
@@ -100,6 +108,24 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
     id holdLastFrameValue = VCReadPreference(VCHoldLastFrameKey);
     id staleFrameTimeoutValue = VCReadPreference(VCStaleFrameTimeoutKey);
     id sourceRestartTokenValue = VCReadPreference(VCSourceRestartTokenKey);
+
+    enabledValue = enabledValue ?: directPreferences[VCEnabledKey];
+    streamValue = streamValue ?: directPreferences[VCStreamURLKey];
+    fpsValue = fpsValue ?: directPreferences[VCPreferredFPSKey];
+    sourceRotationValue = sourceRotationValue ?: directPreferences[VCSourceRotationKey];
+    mirrorSourceValue = mirrorSourceValue ?: directPreferences[VCMirrorSourceKey];
+    maximumPixelDimensionValue = maximumPixelDimensionValue ?:
+        directPreferences[VCMaximumPixelDimensionKey];
+    qualityValue = qualityValue ?: directPreferences[VCJPEGQualityKey];
+    aspectFillValue = aspectFillValue ?: directPreferences[VCAspectFillKey];
+    sourceTypeValue = sourceTypeValue ?: directPreferences[VCSourceTypeKey];
+    localMediaPathValue = localMediaPathValue ?: directPreferences[VCLocalMediaPathKey];
+    loopLocalMediaValue = loopLocalMediaValue ?: directPreferences[VCLoopLocalMediaKey];
+    holdLastFrameValue = holdLastFrameValue ?: directPreferences[VCHoldLastFrameKey];
+    staleFrameTimeoutValue = staleFrameTimeoutValue ?:
+        directPreferences[VCStaleFrameTimeoutKey];
+    sourceRestartTokenValue = sourceRestartTokenValue ?:
+        directPreferences[VCSourceRestartTokenKey];
 
     // Read the original project's preference file as a migration fallback.
     if (!enabledValue || !streamValue) {

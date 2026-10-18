@@ -369,18 +369,22 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
     BOOL aspectFill = YES;
     NSInteger preferredFPS = 60;
     BOOL outputPathActive = NO;
-    CVPixelBufferRef pixelBuffer =
+    CVPixelBufferRef compatibilityBuffer =
         VCCopySessionCompatibilityPixelBuffer(previewLayer.session, &outputPathActive);
-    if (outputPathActive && pixelBuffer) {
-        CVPixelBufferRef displayBuffer = VCCopyDisplayPixelBuffer(pixelBuffer);
-        CVPixelBufferRelease(pixelBuffer);
-        pixelBuffer = displayBuffer;
-    }
-    if (!outputPathActive) {
-        pixelBuffer = [coordinator copyLatestPixelBufferWithAspectFill:&aspectFill
-                                                          preferredFPS:&preferredFPS];
-    } else {
+    CVPixelBufferRef pixelBuffer =
+        [coordinator copyLatestPixelBufferWithAspectFill:&aspectFill
+                                             preferredFPS:&preferredFPS];
+    BOOL usingSharedFrame = pixelBuffer != NULL;
+    BOOL usingCompatibilityFrame = NO;
+    if (usingSharedFrame) {
+        if (compatibilityBuffer) CVPixelBufferRelease(compatibilityBuffer);
+    } else if (outputPathActive && compatibilityBuffer) {
+        pixelBuffer = VCCopyDisplayPixelBuffer(compatibilityBuffer);
+        CVPixelBufferRelease(compatibilityBuffer);
+        usingCompatibilityFrame = pixelBuffer != NULL;
         preferredFPS = coordinator.preferredFPS;
+    } else if (compatibilityBuffer) {
+        CVPixelBufferRelease(compatibilityBuffer);
     }
     NSInteger maximumDisplayFPS = MAX(1, UIScreen.mainScreen.maximumFramesPerSecond);
     NSInteger displayFPS = pixelBuffer ? MIN(preferredFPS, maximumDisplayFPS) : 1;
@@ -402,10 +406,10 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     if (!CGRectEqualToRect(overlay.frame, previewLayer.bounds)) overlay.frame = previewLayer.bounds;
-    // When the application consumes video data, display that exact converted
-    // frame with its complete bounds. This makes preview, recording input, and
-    // downstream processing WYSIWYG instead of applying a second crop.
-    overlay.contentsGravity = outputPathActive
+    // Prefer the continuously published SpringBoard surface. If it is briefly
+    // unavailable, display the application's converted compatibility frame
+    // with complete bounds instead of applying a second crop.
+    overlay.contentsGravity = usingCompatibilityFrame
         ? kCAGravityResizeAspect
         : (aspectFill ? kCAGravityResizeAspectFill : kCAGravityResizeAspect);
     if (shouldDisplay) {
@@ -421,7 +425,7 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
         overlay.hidden = YES;
     }
     [CATransaction commit];
-    if (!outputPathActive && pixelBuffer) {
+    if (usingSharedFrame && pixelBuffer) {
         // CoreAnimation consumes the IOSurface asynchronously. Transfer the
         // cross-process use-count lease to the display target and retire it
         // only after the next surface has been committed.

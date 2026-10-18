@@ -11,10 +11,10 @@ set "VCAM_OBS_SCENE="
 @rem auto reads the current saved OBS profile on launcher start and OBS reconnect.
 @rem Explicit alternatives: landscape or portrait; 720p, 1080p, 1440p, or 2160p.
 set "VCAM_ORIENTATION=landscape"
-set "VCAM_RESOLUTION=auto"
+set "VCAM_RESOLUTION=720p"
 @rem Accepts 1-240, including 23.976, 59.94, 120, 240, or rational expressions.
 @rem OBS must publish the same rate; restart Virtual Camera after changing OBS Video settings.
-set "VCAM_FPS=auto"
+set "VCAM_FPS=30"
 
 @rem fill crops the edges to remove bars; fit preserves the whole source; stretch distorts it.
 set "VCAM_SCALE_MODE=fill"
@@ -26,7 +26,7 @@ set "VCAM_TRANSPORT=mjpeg"
 
 @rem FFmpeg MJPEG quality from 1 through 31. Lower is clearer and uses more bandwidth.
 @rem Quality 1 is the maximum encoder quality; ignored when VCAM_TRANSPORT=hls.
-set "VCAM_QUALITY=1"
+set "VCAM_QUALITY=5"
 
 @rem HLS/H.264 settings. These are ignored in MJPEG mode.
 @rem 250 ms segments with an Apple-compatible six-segment live window.
@@ -61,7 +61,7 @@ set "VCAM_TCP_SEND_BUFFER_MB=1"
 set "VCAM_FFMPEG_LOG_LEVEL=error"
 
 @rem Refuse to silently upscale a stale or low-resolution OBS Virtual Camera mode.
-set "VCAM_REQUIRE_OBS_MODE_MATCH=true"
+set "VCAM_REQUIRE_OBS_MODE_MATCH=false"
 
 @rem When OBS is already running, use its password-protected local WebSocket API to
 @rem start or safely refresh only Virtual Camera. OBS itself is never force-closed.
