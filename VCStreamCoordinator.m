@@ -734,7 +734,12 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
     hold = _configuredHoldLastFrame;
     staleTimeout = _configuredStaleFrameTimeout;
     os_unfair_lock_unlock(&_stateLock);
-    if (!enabled) return NULL;
+    // SpringBoard is the canonical producer and invalidates the shared bus as
+    // soon as replacement is disabled. Sandboxed camera applications cannot
+    // reliably read SpringBoard's preference domain, so consumers must use
+    // the presence of a valid shared frame as the authoritative state instead
+    // of rejecting it because their local CFPreferences lookup returned NO.
+    if (_producerProcess && !enabled) return NULL;
     NSTimeInterval maximumAge = hold ? 365.0 * 24.0 * 60.0 * 60.0 : staleTimeout;
     CVPixelBufferRef result = [[VCSharedVideoClient sharedClient]
         copyLatestPixelBufferWithMaximumAge:maximumAge];
@@ -756,15 +761,18 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
     BOOL hold = _configuredHoldLastFrame;
     NSTimeInterval timeout = _configuredStaleFrameTimeout;
     os_unfair_lock_unlock(&_stateLock);
-    return enabled && [[VCSharedVideoClient sharedClient]
+    BOOL hasPublishedFrame = [[VCSharedVideoClient sharedClient]
         hasPublishedFrameWithMaximumAge:hold ? 365.0 * 24.0 * 60.0 * 60.0 : timeout];
+    return (_producerProcess ? enabled : YES) && hasPublishedFrame;
 }
 
 - (BOOL)isSystemPipelineReplacementConfigured {
     os_unfair_lock_lock(&_stateLock);
     BOOL enabled = _replacementEnabled;
     os_unfair_lock_unlock(&_stateLock);
-    return enabled;
+    if (_producerProcess) return enabled;
+    return [[VCSharedVideoClient sharedClient]
+        hasPublishedFrameWithMaximumAge:365.0 * 24.0 * 60.0 * 60.0];
 }
 
 - (NSInteger)preferredFPS {

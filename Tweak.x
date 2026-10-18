@@ -340,6 +340,8 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
 
 @interface VCPreviewDisplayTarget : NSObject {
     CVPixelBufferRef _sharedPixelBufferLease;
+    BOOL _hasLoggedDisplayState;
+    BOOL _lastShouldDisplay;
 }
 @property (nonatomic, weak) AVCaptureVideoPreviewLayer *previewLayer;
 @property (nonatomic, strong, nullable) id displayedSurface;
@@ -395,6 +397,18 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
         ? CVPixelBufferGetIOSurface(pixelBuffer)
         : NULL;
     BOOL shouldDisplay = displaySurface != NULL;
+    if (!_hasLoggedDisplayState || _lastShouldDisplay != shouldDisplay) {
+        _hasLoggedDisplayState = YES;
+        _lastShouldDisplay = shouldDisplay;
+        NSLog(@"[VirtualCamPro] Preview %@ in %@ (shared=%@, compatibility=%@, failure=%u)",
+              shouldDisplay ? @"active" : @"waiting for source",
+              NSProcessInfo.processInfo.processName,
+              usingSharedFrame ? @"YES" : @"NO",
+              usingCompatibilityFrame ? @"YES" : @"NO",
+              shouldDisplay || outputPathActive
+                  ? 0
+                  : (unsigned int)VCSharedVideoLastFailureReason());
+    }
     VCReportApplicationVideoRuntimeEvent(
         shouldDisplay
             ? VCApplicationVideoRuntimePreviewFrameDisplayed
@@ -442,31 +456,39 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
 
 @end
 
+static void VCEnsurePreviewOverlay(AVCaptureVideoPreviewLayer *previewLayer) {
+    if (!previewLayer) return;
+    if (![NSThread isMainThread]) {
+        __weak AVCaptureVideoPreviewLayer *weakLayer = previewLayer;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            VCEnsurePreviewOverlay(weakLayer);
+        });
+        return;
+    }
 
-%hook AVCaptureVideoPreviewLayer
-
-- (void)layoutSublayers {
-    %orig;
-
-    CALayer *overlay = objc_getAssociatedObject(self, &VCPreviewOverlayAssociationKey);
+    CALayer *overlay = objc_getAssociatedObject(previewLayer,
+                                                 &VCPreviewOverlayAssociationKey);
     if (overlay) {
-        overlay.frame = self.bounds;
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        overlay.frame = previewLayer.bounds;
+        [CATransaction commit];
         return;
     }
 
     overlay = [CALayer layer];
-    overlay.frame = self.bounds;
+    overlay.frame = previewLayer.bounds;
     overlay.zPosition = CGFLOAT_MAX;
     overlay.masksToBounds = YES;
     overlay.hidden = YES;
-    [self addSublayer:overlay];
-    objc_setAssociatedObject(self,
+    [previewLayer addSublayer:overlay];
+    objc_setAssociatedObject(previewLayer,
                              &VCPreviewOverlayAssociationKey,
                              overlay,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     VCPreviewDisplayTarget *target = [VCPreviewDisplayTarget new];
-    target.previewLayer = self;
+    target.previewLayer = previewLayer;
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:target
                                                              selector:@selector(displayLinkDidFire:)];
     VCStreamCoordinator *coordinator = [VCStreamCoordinator sharedCoordinator];
@@ -475,17 +497,44 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
               MAX(1, UIScreen.mainScreen.maximumFramesPerSecond))
         : 1;
     [displayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-    objc_setAssociatedObject(self,
+    objc_setAssociatedObject(previewLayer,
                              &VCPreviewTargetAssociationKey,
                              target,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(self,
+    objc_setAssociatedObject(previewLayer,
                              &VCPreviewDisplayLinkAssociationKey,
                              displayLink,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSLog(@"[VirtualCamPro] Preview overlay installed in %@",
+          NSProcessInfo.processInfo.processName);
     VCReportApplicationVideoRuntimeEvent(
         VCApplicationVideoRuntimePreviewOverlayInstalled,
         0);
+}
+
+
+%hook AVCaptureVideoPreviewLayer
+
+- (instancetype)initWithSession:(AVCaptureSession *)session {
+    AVCaptureVideoPreviewLayer *result = %orig;
+    VCEnsurePreviewOverlay(result);
+    return result;
+}
+
+- (instancetype)initWithSessionWithNoConnection:(AVCaptureSession *)session {
+    AVCaptureVideoPreviewLayer *result = %orig;
+    VCEnsurePreviewOverlay(result);
+    return result;
+}
+
+- (void)setSession:(AVCaptureSession *)session {
+    %orig;
+    VCEnsurePreviewOverlay(self);
+}
+
+- (void)layoutSublayers {
+    %orig;
+    VCEnsurePreviewOverlay(self);
 }
 
 %end

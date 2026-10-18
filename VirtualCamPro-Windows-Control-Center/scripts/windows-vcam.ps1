@@ -34,6 +34,8 @@ param(
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
+$script:VCamBridgeMutex = $null
+$script:VCamBridgeMutexHeld = $false
 $obsWebSocketHelpers = Join-Path $PSScriptRoot "obs-websocket.ps1"
 if (Test-Path -LiteralPath $obsWebSocketHelpers -PathType Leaf) {
     . $obsWebSocketHelpers
@@ -60,6 +62,25 @@ function Stop-Vcam {
     )
     Write-VcamStatus -Level "ERROR" -Message $Message
     exit $ExitCode
+}
+
+function Enter-VcamBridgeMutex {
+    param([Parameter(Mandatory = $true)][int]$ListenPort)
+    $mutexName = "Local\VirtualCamProBridge-$ListenPort"
+    $script:VCamBridgeMutex = [Threading.Mutex]::new($false, $mutexName)
+    try {
+        $script:VCamBridgeMutexHeld = $script:VCamBridgeMutex.WaitOne(0)
+    } catch [Threading.AbandonedMutexException] {
+        $script:VCamBridgeMutexHeld = $true
+    }
+    if (-not $script:VCamBridgeMutexHeld) {
+        $script:VCamBridgeMutex.Dispose()
+        $script:VCamBridgeMutex = $null
+        Stop-Vcam -ExitCode 4 -Message (
+            "Another VirtualCamPro bridge already owns TCP port $ListenPort. " +
+            "Use its existing window or stop it before starting another copy."
+        )
+    }
 }
 
 function Get-VcamSetting {
@@ -1660,6 +1681,11 @@ if ($normalizedMode -eq "check") {
     exit 0
 }
 
+# FFmpeg's listen socket becomes an established connection while the phone is
+# attached, so a normal port-listener check alone cannot detect another active
+# bridge. Keep a per-port mutex for the lifetime of this launcher.
+Enter-VcamBridgeMutex -ListenPort $effectivePort
+
 if ($normalizedMode -eq "obs") {
     $runningObs = Get-Process -Name "obs64" -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $runningObs) {
@@ -1940,5 +1966,13 @@ try {
     }
     if ($hlsRoot -and (Test-Path -LiteralPath $hlsRoot -PathType Container)) {
         Remove-Item -LiteralPath $hlsRoot -Force -Recurse -ErrorAction SilentlyContinue
+    }
+    if ($script:VCamBridgeMutexHeld -and $script:VCamBridgeMutex) {
+        try { $script:VCamBridgeMutex.ReleaseMutex() } catch {}
+        $script:VCamBridgeMutexHeld = $false
+    }
+    if ($script:VCamBridgeMutex) {
+        $script:VCamBridgeMutex.Dispose()
+        $script:VCamBridgeMutex = $null
     }
 }
