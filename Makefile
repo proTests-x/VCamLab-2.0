@@ -5,7 +5,7 @@ export ARCHS
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = AVFCameraSupport VCMediaServer
+TWEAK_NAME = AVFCameraSupport VCMediaServer VCFloatingControl
 
 VC_SHARED_FILES = AVAssetStreamAdapter.m VCPreferences.m VCStreamCoordinator.m VCFrameConverter.m \
 	VCSharedMediaBus.m VCAudioSampleConverter.m VCScreenCaptureSource.m VCLocalMediaSource.m
@@ -21,6 +21,12 @@ VCMediaServer_CFLAGS = -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter -Wno-d
 VCMediaServer_FRAMEWORKS = AVFoundation AudioToolbox CoreImage CoreMedia CoreVideo QuartzCore CoreGraphics Foundation ImageIO IOSurface VideoToolbox
 VCMediaServer_LDFLAGS = -Wl,-dead_strip
 VCMediaServer_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
+
+VCFloatingControl_FILES = VCFloatingControl.x VCPreferences.m
+VCFloatingControl_CFLAGS = -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter -Wno-deprecated-declarations
+VCFloatingControl_FRAMEWORKS = UIKit QuartzCore Foundation
+VCFloatingControl_LDFLAGS = -Wl,-dead_strip
+VCFloatingControl_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 
 INSTALL_TARGET_PROCESSES = SpringBoard Camera mediaserverd
 

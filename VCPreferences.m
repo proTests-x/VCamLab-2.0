@@ -19,6 +19,9 @@ NSString * const VCLoopLocalMediaKey = @"loopLocalMedia";
 NSString * const VCHoldLastFrameKey = @"holdLastFrame";
 NSString * const VCStaleFrameTimeoutKey = @"staleFrameTimeout";
 NSString * const VCSourceRestartTokenKey = @"sourceRestartToken";
+NSString * const VCFloatingControlEnabledKey = @"floatingControlEnabled";
+NSString * const VCFloatingControlCenterXKey = @"floatingControlCenterX";
+NSString * const VCFloatingControlCenterYKey = @"floatingControlCenterY";
 
 static NSString * const VCLegacyPreferencesPath = @"/var/mobile/Library/Preferences/com.apple.avfoundation.cs.plist";
 

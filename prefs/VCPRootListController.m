@@ -714,6 +714,7 @@ static BOOL VCPRepairStoredPreferences(void) {
 
     NSDictionary<NSString *, NSNumber *> *booleanDefaults = @{
         @"enabled": @NO,
+        @"floatingControlEnabled": @YES,
         @"loopLocalMedia": @YES,
         @"mirrorSource": @NO,
         @"aspectFill": @YES,

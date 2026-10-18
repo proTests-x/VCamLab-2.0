@@ -18,6 +18,9 @@ FOUNDATION_EXPORT NSString * const VCLoopLocalMediaKey;
 FOUNDATION_EXPORT NSString * const VCHoldLastFrameKey;
 FOUNDATION_EXPORT NSString * const VCStaleFrameTimeoutKey;
 FOUNDATION_EXPORT NSString * const VCSourceRestartTokenKey;
+FOUNDATION_EXPORT NSString * const VCFloatingControlEnabledKey;
+FOUNDATION_EXPORT NSString * const VCFloatingControlCenterXKey;
+FOUNDATION_EXPORT NSString * const VCFloatingControlCenterYKey;
 
 typedef NS_ENUM(NSInteger, VCSourceType) {
     VCSourceTypeNetwork = 0,
