@@ -6,7 +6,11 @@ if [ "${1:-}" = "configure" ] && command -v killall >/dev/null 2>&1; then
     killall mediaserverd 2>/dev/null || true
     killall Camera 2>/dev/null || true
     killall Preferences 2>/dev/null || true
-    killall SpringBoard 2>/dev/null || true
+    if [ "${VCAM_DEFER_RESPRING:-0}" = "1" ]; then
+        echo "VirtualCamPro installed; SpringBoard respring deferred by request."
+    else
+        killall SpringBoard 2>/dev/null || true
+    fi
 fi
 
 exit 0
