@@ -378,8 +378,29 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
         // early process launch. A validated HLS URL is sufficient here: the
         // Windows endpoint is multi-client and SpringBoard still owns the
         // authoritative enable/disable publication state.
-        BOOL supportsDirectFallback = networkURL != nil &&
-            [networkURL.pathExtension.lowercaseString isEqualToString:@"m3u8"];
+        NSURL *consumerNetworkURL = networkURL;
+        if (!consumerNetworkURL) {
+            CFPropertyListRef rawURL = CFPreferencesCopyAppValue(
+                (__bridge CFStringRef)VCStreamURLKey,
+                (__bridge CFStringRef)VCPreferencesDomain);
+            id value = CFBridgingRelease(rawURL);
+            if ([value isKindOfClass:NSString.class]) {
+                NSURL *candidate = [NSURL URLWithString:value];
+                NSString *scheme = candidate.scheme.lowercaseString;
+                if (([scheme isEqualToString:@"http"] ||
+                     [scheme isEqualToString:@"https"]) &&
+                    candidate.host.length > 0 && candidate.user.length == 0 &&
+                    candidate.password.length == 0 && candidate.fragment.length == 0) {
+                    consumerNetworkURL = candidate;
+                }
+            }
+        }
+        BOOL supportsDirectFallback = consumerNetworkURL != nil &&
+            [consumerNetworkURL.pathExtension.lowercaseString isEqualToString:@"m3u8"];
+        NSLog(@"[VirtualCamPro] Consumer HLS evaluation in %@: url=%@ supported=%@",
+              NSProcessInfo.processInfo.processName,
+              consumerNetworkURL.absoluteString ?: @"<none>",
+              supportsDirectFallback ? @"YES" : @"NO");
         dispatch_async(dispatch_get_main_queue(), ^{
             os_unfair_lock_lock(&self->_stateLock);
             BOOL current = preferenceGeneration == self->_preferencesGeneration;
@@ -387,7 +408,7 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
             if (!current) return;
 
             NSString *fallbackIdentity = supportsDirectFallback
-                ? [@"consumer-hls:" stringByAppendingString:networkURL.absoluteString]
+                ? [@"consumer-hls:" stringByAppendingString:consumerNetworkURL.absoluteString]
                 : nil;
             if (fallbackIdentity.length > 0 &&
                 [self.activeSourceIdentity isEqualToString:fallbackIdentity] &&
@@ -405,7 +426,7 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
             os_unfair_lock_unlock(&self->_stateLock);
 
             AVAssetStreamAdapter *source = [[AVAssetStreamAdapter alloc]
-                                             initWithURL:networkURL];
+                                             initWithURL:consumerNetworkURL];
             __weak VCStreamCoordinator *weakSelf = self;
             source.pixelBufferCallback = ^(CVPixelBufferRef pixelBuffer) {
                 [weakSelf storeConsumerFallbackPixelBuffer:pixelBuffer
