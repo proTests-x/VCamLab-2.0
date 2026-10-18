@@ -8,6 +8,7 @@
 #import "VCSharedMediaBus.h"
 #import <float.h>
 #import <IOSurface/IOSurfaceRef.h>
+#import <math.h>
 #import <notify.h>
 #import <os/lock.h>
 
@@ -16,6 +17,12 @@ static const char *VCStreamStatusNotificationName =
 static const char *VCLocalTransformStatusNotificationName =
     "com.murkaska.virtualcampro/local-transform.status";
 static const int VCInvalidNotifyToken = -1;
+
+static uint64_t VCConsumerMonotonicMilliseconds(void) {
+    NSTimeInterval uptime = NSProcessInfo.processInfo.systemUptime;
+    if (!isfinite(uptime) || uptime <= 0) return 0;
+    return (uint64_t)llround(uptime * 1000.0);
+}
 
 typedef NS_ENUM(uint64_t, VCStreamStatus) {
     VCStreamStatusDisabled = 0,
@@ -823,7 +830,7 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
         sourceGeneration == _sourceGeneration) {
         retired = _consumerFallbackPixelBuffer;
         _consumerFallbackPixelBuffer = retained;
-        _consumerFallbackTimestampMilliseconds = VCMonotonicMilliseconds();
+        _consumerFallbackTimestampMilliseconds = VCConsumerMonotonicMilliseconds();
         logFirstFrame = !_loggedConsumerFallbackFrame;
         _loggedConsumerFallbackFrame = YES;
         retained = NULL;
@@ -872,7 +879,7 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
         localTimestamp = _consumerFallbackTimestampMilliseconds;
         os_unfair_lock_unlock(&_stateLock);
         BOOL localIsFresh = local && (hold || VCSharedTimestampIsRecent(
-            VCMonotonicMilliseconds(), localTimestamp,
+            VCConsumerMonotonicMilliseconds(), localTimestamp,
             (uint64_t)MAX(1.0, staleTimeout * 1000.0)));
         if (localIsFresh) {
             IOSurfaceRef surface = CVPixelBufferGetIOSurface(local);
