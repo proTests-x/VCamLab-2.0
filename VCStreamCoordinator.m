@@ -373,8 +373,12 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
         // global surface. HLS is intentionally multi-client, so those consumers
         // can decode the same Windows stream locally without competing for the
         // single MJPEG listener connection.
-        BOOL supportsDirectFallback = enabled &&
-            sourceType == VCSourceTypeNetwork &&
+        // A sandboxed consumer can resolve the canonical URL through cfprefsd
+        // while the adjacent enabled/sourceType reads are briefly absent during
+        // early process launch. A validated HLS URL is sufficient here: the
+        // Windows endpoint is multi-client and SpringBoard still owns the
+        // authoritative enable/disable publication state.
+        BOOL supportsDirectFallback = networkURL != nil &&
             [networkURL.pathExtension.lowercaseString isEqualToString:@"m3u8"];
         dispatch_async(dispatch_get_main_queue(), ^{
             os_unfair_lock_lock(&self->_stateLock);
