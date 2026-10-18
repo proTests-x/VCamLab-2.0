@@ -69,8 +69,8 @@
                   },
                   {
                       "path":  "scripts\\windows-vcam.ps1",
-                      "bytes":  88767,
-                      "sha256":  "974654000DB5D68539192CF673CA5BEE9B004515FE8207A777BF9C0F923C2D8F",
+                      "bytes":  90200,
+                      "sha256":  "C5E0A426D5E5C4038680B37721A8B635444D97E6814706BA6B8337904F577F61",
                       "mutable":  false
                   },
                   {
