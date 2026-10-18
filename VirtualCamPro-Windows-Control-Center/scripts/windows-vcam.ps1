@@ -1095,7 +1095,7 @@ function New-VcamFfmpegArguments {
             "-queue_size", [string]$NetworkQueueSize,
             "-drop_pkts_on_overflow", "1",
             "-format_opts", (("listen=1:flush_packets=1:send_buffer_size={0}:" +
-                "tcp_nodelay=1:tcp_keepalive=1:" +
+                "tcp_nodelay=1:" +
                 "content_type=multipart/x-mixed-replace;boundary=ffmpeg") -f ($NetworkSendBufferMB * 1MB)),
             $ListenerURL
         ))
@@ -1241,7 +1241,8 @@ FPSDen=1001
         $argumentText -notlike "*-threads`n4*" -or
         $argumentText -notlike "*-fifo_format`nmpjpeg*" -or
         $argumentText -notlike "*-drop_pkts_on_overflow`n1*" -or
-        $argumentText -notlike "*-format_opts`nlisten=1:flush_packets=1:send_buffer_size=4194304:tcp_nodelay=1:tcp_keepalive=1:content_type=multipart/x-mixed-replace;boundary=ffmpeg*" -or
+        $argumentText -notlike "*-format_opts`nlisten=1:flush_packets=1:send_buffer_size=4194304:tcp_nodelay=1:content_type=multipart/x-mixed-replace;boundary=ffmpeg*" -or
+        $argumentText -like "*tcp_keepalive*" -or
         $argumentTest -notcontains "1920x1080" -or
         $argumentTest -notcontains "nv12") {
         Stop-Vcam -ExitCode 70 -Message "Dynamic FFmpeg argument self-test failed."
