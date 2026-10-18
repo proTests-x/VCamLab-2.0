@@ -407,6 +407,7 @@ def validate_zero_copy_bus() -> None:
     orientation = read_text("VCLocalOrientationMath.h")
     network = read_text("AVAssetStreamAdapter.m")
     network_header = read_text("AVAssetStreamAdapter.h")
+    converter = read_text("VCFrameConverter.m")
     coordinator = read_text("VCStreamCoordinator.m")
     require(
         header + protocol + bus,
@@ -551,11 +552,22 @@ def validate_zero_copy_bus() -> None:
         "local track orientation resolver",
     )
     require(
+        converter + coordinator,
+        (
+            "VCCopyShareablePixelBuffer",
+            "VCCopyBGRAStorage(source, NO)",
+            "kCVPixelBufferIOSurfacePropertiesKey",
+            "kIOSurfaceIsGlobal",
+            "publishPixelBuffer:shareable",
+        ),
+        "global producer frame copy",
+    )
+    require(
         coordinator,
         (
             'isEqualToString:@"SpringBoard"',
             "stopAllSourcesAndInvalidateBus",
-            "publishPixelBuffer:transformed",
+            "publishPixelBuffer:shareable",
             "publishInterleavedStereoSamples",
             "_pendingPixelBuffer",
             "_frameProcessingScheduled",

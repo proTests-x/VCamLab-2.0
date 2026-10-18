@@ -569,13 +569,27 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
         if (!transformed) transformed = CVPixelBufferRetain(input);
         CVPixelBufferRelease(input);
 
+        // Do not publish the decoder's surface directly. On iOS 15,
+        // VideoToolbox can return an IOSurface with a valid local ID while
+        // ignoring kIOSurfaceIsGlobal, so Camera sees the notification state
+        // but IOSurfaceLookup fails. Copy into our own global BGRA pool first.
+        CVPixelBufferRef shareable = VCCopyShareablePixelBuffer(transformed);
+        if (!shareable) {
+            static dispatch_once_t shareableCopyFailureLogToken;
+            dispatch_once(&shareableCopyFailureLogToken, ^{
+                NSLog(@"[VirtualCamPro] Could not create a global shared frame; "
+                       @"preserving the previous published frame");
+            });
+        }
+
         os_unfair_lock_lock(&_stateLock);
         BOOL current = _replacementEnabled && sourceGeneration == _sourceGeneration &&
                        transformGeneration == _transformGeneration;
         BOOL firstFrame = current && !_loggedFirstFrame;
         if (firstFrame) _loggedFirstFrame = YES;
         os_unfair_lock_unlock(&_stateLock);
-        if (current && [[VCSharedVideoServer sharedServer] publishPixelBuffer:transformed]) {
+        if (current && shareable &&
+            [[VCSharedVideoServer sharedServer] publishPixelBuffer:shareable]) {
             [self publishStreamStatus:VCStreamStatusReceiving];
             BOOL publishTransformStatus = NO;
             os_unfair_lock_lock(&_stateLock);
@@ -603,6 +617,7 @@ static void VCPreferencesDidChange(CFNotificationCenterRef center,
                       userMirror ? @"YES" : @"NO");
             }
         }
+        if (shareable) CVPixelBufferRelease(shareable);
         CVPixelBufferRelease(transformed);
     }
 }

@@ -490,9 +490,11 @@ CVPixelBufferRef VCCopyPixelBufferApplyingOrientation(CVPixelBufferRef source,
     return destination;
 }
 
-CVPixelBufferRef VCCopyDisplayPixelBuffer(CVPixelBufferRef source) {
+static CVPixelBufferRef VCCopyBGRAStorage(CVPixelBufferRef source,
+                                          BOOL allowRetainedBGRA) {
     if (!source) return NULL;
-    if (CVPixelBufferGetPixelFormatType(source) == kCVPixelFormatType_32BGRA) {
+    if (allowRetainedBGRA &&
+        CVPixelBufferGetPixelFormatType(source) == kCVPixelFormatType_32BGRA) {
         return CVPixelBufferRetain(source);
     }
 
@@ -528,6 +530,17 @@ CVPixelBufferRef VCCopyDisplayPixelBuffer(CVPixelBufferRef source) {
                bounds:CGRectMake(0, 0, width, height)
            colorSpace:colorSpace];
     return destination;
+}
+
+CVPixelBufferRef VCCopyDisplayPixelBuffer(CVPixelBufferRef source) {
+    return VCCopyBGRAStorage(source, YES);
+}
+
+CVPixelBufferRef VCCopyShareablePixelBuffer(CVPixelBufferRef source) {
+    // Always copy, including BGRA input. Decoder-owned IOSurfaces can expose a
+    // nonzero ID while remaining non-global, which makes IOSurfaceLookup fail
+    // in sandboxed consumers. The destination pool requests global storage.
+    return VCCopyBGRAStorage(source, NO);
 }
 
 void VCResetFrameConverterCache(void) {

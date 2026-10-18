@@ -23,6 +23,13 @@ FOUNDATION_EXPORT CVPixelBufferRef _Nullable VCCopyPixelBufferApplyingOrientatio
 FOUNDATION_EXPORT CVPixelBufferRef _Nullable VCCopyDisplayPixelBuffer(
     CVPixelBufferRef source) CF_RETURNS_RETAINED;
 
+/// Copies any decoder-owned frame into storage allocated by VirtualCamPro
+/// with a global IOSurface. VideoToolbox may ignore the requested global
+/// property on its own output surfaces, making their IDs impossible to look
+/// up from Camera or mediaserverd even though the producer can render them.
+FOUNDATION_EXPORT CVPixelBufferRef _Nullable VCCopyShareablePixelBuffer(
+    CVPixelBufferRef source) CF_RETURNS_RETAINED;
+
 FOUNDATION_EXPORT CMSampleBufferRef _Nullable VCCopyReplacementSampleBuffer(
     CMSampleBufferRef original,
     CVPixelBufferRef source,
