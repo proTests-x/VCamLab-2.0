@@ -33,8 +33,8 @@
                   },
                   {
                       "path":  "scripts\\hls-server.ps1",
-                      "bytes":  13114,
-                      "sha256":  "99690CED8CCCE3E427666DD8B18D65D185DAB4CB7D2EAF69F3DD6D21C2D158A7",
+                      "bytes":  15438,
+                      "sha256":  "624C9D1A3A0A4F69939B775C2EEB8434875592DC9039B23B4C19D51040A8CF8C",
                       "mutable":  false
                   },
                   {
