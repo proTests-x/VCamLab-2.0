@@ -1154,7 +1154,11 @@ function New-VcamFfmpegArguments {
         "-f", "hls",
         "-hls_time", $segmentText,
         "-hls_list_size", [string]$HlsPlaylistSize,
-        "-hls_delete_threshold", "2",
+        # Keep completed segments well beyond the six-entry live playlist.
+        # Older iPhones can need tens of seconds to initialize AVPlayer; a
+        # two-segment grace period deleted the startup media while it was still
+        # referenced by the player, producing one frame followed by a stall.
+        "-hls_delete_threshold", "30",
         "-hls_flags", "delete_segments+independent_segments+omit_endlist+temp_file+program_date_time",
         "-hls_segment_filename", $segmentPattern,
         $OutputPath

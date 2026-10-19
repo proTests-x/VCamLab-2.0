@@ -33,8 +33,8 @@
                   },
                   {
                       "path":  "scripts\\hls-server.ps1",
-                      "bytes":  15438,
-                      "sha256":  "624C9D1A3A0A4F69939B775C2EEB8434875592DC9039B23B4C19D51040A8CF8C",
+                      "bytes":  16588,
+                      "sha256":  "2C1135C61593E11D8148C9BEF63641BE40511EC99ED83A348534D770F647547B",
                       "mutable":  false
                   },
                   {
@@ -69,8 +69,8 @@
                   },
                   {
                       "path":  "scripts\\windows-vcam.ps1",
-                      "bytes":  90200,
-                      "sha256":  "C5E0A426D5E5C4038680B37721A8B635444D97E6814706BA6B8337904F577F61",
+                      "bytes":  90512,
+                      "sha256":  "8F00B10361A8AE58BABA0B648969293A11AB92EADAE1B7636E1DCE2F5836215E",
                       "mutable":  false
                   },
                   {

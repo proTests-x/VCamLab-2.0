@@ -53,6 +53,8 @@ namespace VirtualCamPro
         private static string root;
         private static string rootPrefix;
         private static string playlistName;
+        private static int loggedFirstPlaylist;
+        private static int loggedFirstSegment;
 
         public static void Run(string rootPath, string bindAddress, int port, string playlist)
         {
@@ -178,6 +180,8 @@ namespace VirtualCamPro
                     }
                     if (!File.Exists(fullPath))
                     {
+                        Console.Error.WriteLine("[HLS] 404 {0} requested by {1}",
+                            relativePath, client.Client.RemoteEndPoint);
                         SendSimple(stream, 404, "Not Found", "Not Found", method == "HEAD");
                         return;
                     }
@@ -217,6 +221,8 @@ namespace VirtualCamPro
                                 if (start >= 0 && start < length && end >= start) partial = true;
                                 else
                                 {
+                                    Console.Error.WriteLine("[HLS] 416 {0} range={1} length={2}",
+                                        relativePath, rangeValue, length);
                                     SendHeaders(stream, 416, "Range Not Satisfiable", new Dictionary<string, string>
                                     {
                                         { "Content-Range", "bytes */" + length },
@@ -232,6 +238,12 @@ namespace VirtualCamPro
                         }
                         long count = length == 0 ? 0 : end - start + 1;
                         bool isPlaylist = relativePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
+                        if (isPlaylist && Interlocked.CompareExchange(ref loggedFirstPlaylist, 1, 0) == 0)
+                            Console.WriteLine("[HLS] Serving the first playlist request to {0}",
+                                client.Client.RemoteEndPoint);
+                        if (!isPlaylist && Interlocked.CompareExchange(ref loggedFirstSegment, 1, 0) == 0)
+                            Console.WriteLine("[HLS] Serving the first media segment ({0}) to {1}",
+                                relativePath, client.Client.RemoteEndPoint);
                         Dictionary<string, string> responseHeaders = new Dictionary<string, string>
                         {
                             { "Content-Type", isPlaylist ? "application/vnd.apple.mpegurl" : "video/mp2t" },
@@ -260,8 +272,10 @@ namespace VirtualCamPro
                         }
                     }
                 }
-                catch
+                catch (Exception exception)
                 {
+                    Console.Error.WriteLine("[HLS] Client error from {0}: {1}",
+                        client.Client.RemoteEndPoint, exception.Message);
                     try { SendSimple(stream, 500, "Internal Server Error", "Internal Server Error", false); }
                     catch { }
                 }
