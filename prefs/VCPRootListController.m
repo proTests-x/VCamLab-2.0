@@ -16,6 +16,12 @@
 #import "../VCPreferenceValidation.h"
 #import "../VCSharedMediaProtocol.h"
 
+@interface VCPreferences : NSObject
++ (instancetype)sharedPreferences;
+- (BOOL)reload;
+- (void)publishSharedConfiguration;
+@end
+
 static CFStringRef const VCPreferencesChangedNotification = CFSTR("com.murkaska.virtualcampro/preferences.changed");
 static CFStringRef const VCPreferencesDomain = CFSTR("com.murkaska.virtualcampro");
 static CFStringRef const VCLocalMediaPathKey = CFSTR("localMediaPath");
@@ -988,6 +994,8 @@ static BOOL VCPRepairStoredPreferences(void) {
     }
     [super setPreferenceValue:value specifier:specifier];
     [self synchronizePreferencesIfNeeded:YES];
+    [VCPreferences.sharedPreferences reload];
+    [VCPreferences.sharedPreferences publishSharedConfiguration];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          VCPreferencesChangedNotification,
                                          NULL,

@@ -12,7 +12,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $projectRoot `
-        "artifacts\VirtualCamPro-Windows-Control-Center-2.24.2-standalone"
+        "artifacts\VirtualCamPro-Windows-Control-Center-2.24.3-standalone"
 }
 $outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
 [IO.Directory]::CreateDirectory($outputRoot) | Out-Null
@@ -104,7 +104,7 @@ $manifestFiles = @($deliveredPaths | Sort-Object -Unique | ForEach-Object {
 $manifest = [ordered]@{
     schemaVersion = 1
     toolName = "VirtualCamPro Windows Control Center"
-    toolVersion = "2.24.2"
+    toolVersion = "2.24.3"
     generatedAtUtc = [DateTime]::UtcNow.ToString("o")
     sourceCommit = $sourceCommit
     sourceDirty = [bool]$sourceDirty

@@ -112,6 +112,8 @@ static void VCFloatingPreferencesChanged(CFNotificationCenterRef center,
     }
 
     CFPreferencesAppSynchronize((__bridge CFStringRef)VCPreferencesDomain);
+    [VCPreferences.sharedPreferences reload];
+    [VCPreferences.sharedPreferences publishSharedConfiguration];
     [self updateVisibilityAndState];
 }
 
@@ -237,6 +239,8 @@ static void VCFloatingPreferencesChanged(CFNotificationCenterRef center,
 }
 
 - (void)preferencesDidChange {
+    [VCPreferences.sharedPreferences reload];
+    [VCPreferences.sharedPreferences publishSharedConfiguration];
     [self updateVisibilityAndState];
 }
 
@@ -264,6 +268,8 @@ static void VCFloatingPreferencesChanged(CFNotificationCenterRef center,
     }
 
     [self updateButtonForEnabledState:newEnabled];
+    [VCPreferences.sharedPreferences reload];
+    [VCPreferences.sharedPreferences publishSharedConfiguration];
     if (@available(iOS 10.0, *)) {
         UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc]
             initWithStyle:UIImpactFeedbackStyleMedium];

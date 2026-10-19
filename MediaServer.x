@@ -861,6 +861,9 @@ static void VCMediaServerImageDidLoad(const struct mach_header *header, intptr_t
         if ([processName isEqualToString:@"SpringBoard"] ||
             [bundleIdentifier isEqualToString:@"com.apple.springboard"]) {
             VCStartSharedRuntimeHeartbeat(VCSharedRuntimeProcessSpringBoard);
+            VCPreferences *preferences = VCPreferences.sharedPreferences;
+            [preferences reload];
+            [preferences publishSharedConfiguration];
             [[VCStreamCoordinator sharedCoordinator] startMonitoring];
             dispatch_async(dispatch_get_main_queue(), ^{
                 VCInstallSpringBoardVolumeHooks(0);

@@ -58,6 +58,10 @@ typedef NS_ENUM(NSInteger, VCSourceType) {
 - (BOOL)hasTargetBundleFilter;
 - (BOOL)isBundleIdentifierSelected:(nullable NSString *)bundleIdentifier;
 - (BOOL)isCurrentProcessSelected;
+/// Mirrors the small portion of configuration required by sandboxed camera
+/// clients through notifyd.  SpringBoard and the Settings bundle call this
+/// after loading/writing the canonical preferences file.
+- (void)publishSharedConfiguration;
 
 @end
 

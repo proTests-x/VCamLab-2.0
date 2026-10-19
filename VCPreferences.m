@@ -3,6 +3,7 @@
 #import <float.h>
 #import <notify.h>
 #import <math.h>
+#import <stdint.h>
 
 NSString * const VCPreferencesDomain = @"com.murkaska.virtualcampro";
 NSString * const VCPreferencesChangedNotification = @"com.murkaska.virtualcampro/preferences.changed";
@@ -29,6 +30,147 @@ const char * const VCTargetCaptureStateNotification =
 
 static NSString * const VCLegacyPreferencesPath = @"/var/mobile/Library/Preferences/com.apple.avfoundation.cs.plist";
 static NSString * const VCPreferencesPath = @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
+static NSString * const VCRuntimeConfigurationNotification =
+    @"com.murkaska.virtualcampro/runtime.configuration.v1";
+static const uint16_t VCRuntimeConfigurationMagic = 0x5643;
+static const NSUInteger VCRuntimeMaximumURLBytes = 512;
+
+@interface VCRuntimeConfigurationSnapshot : NSObject
+@property(nonatomic, assign) BOOL enabled;
+@property(nonatomic, assign) BOOL hasTargetFilter;
+@property(nonatomic, assign) BOOL currentProcessSelected;
+@property(nonatomic, assign) VCSourceType sourceType;
+@property(nonatomic, copy, nullable) NSString *streamURLString;
+@end
+
+@implementation VCRuntimeConfigurationSnapshot
+@end
+
+static uint64_t VCFNV1a64(NSData *data) {
+    const uint8_t *bytes = data.bytes;
+    uint64_t hash = UINT64_C(14695981039346656037);
+    for (NSUInteger index = 0; index < data.length; index++) {
+        hash ^= bytes[index];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static NSString *VCTargetRuntimeNotification(NSString *bundleIdentifier) {
+    NSData *data = [bundleIdentifier dataUsingEncoding:NSUTF8StringEncoding] ?: NSData.data;
+    return [NSString stringWithFormat:
+        @"com.murkaska.virtualcampro/runtime.target.%016llx.v1",
+        (unsigned long long)VCFNV1a64(data)];
+}
+
+static NSString *VCURLChunkRuntimeNotification(NSUInteger index) {
+    return [NSString stringWithFormat:
+        @"com.murkaska.virtualcampro/runtime.url.%03lu.v1",
+        (unsigned long)index];
+}
+
+static int VCRuntimeNotifyToken(NSString *name) {
+    static NSMutableDictionary<NSString *, NSNumber *> *tokens;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{ tokens = [NSMutableDictionary dictionary]; });
+    @synchronized (tokens) {
+        NSNumber *stored = tokens[name];
+        if (stored) return stored.intValue;
+        int token = -1;
+        if (notify_register_check(name.UTF8String, &token) != NOTIFY_STATUS_OK) {
+            return -1;
+        }
+        // Keep registrations alive for the process lifetime.  notifyd may
+        // discard state when its last owner cancels a token.
+        tokens[name] = @(token);
+        return token;
+    }
+}
+
+static BOOL VCReadRuntimeState(NSString *name, uint64_t *stateOut) {
+    int token = VCRuntimeNotifyToken(name);
+    return token >= 0 && stateOut &&
+        notify_get_state(token, stateOut) == NOTIFY_STATUS_OK;
+}
+
+static BOOL VCWriteRuntimeState(NSString *name, uint64_t state) {
+    int token = VCRuntimeNotifyToken(name);
+    return token >= 0 && notify_set_state(token, state) == NOTIFY_STATUS_OK;
+}
+
+static uint16_t VCNextRuntimeConfigurationGeneration(void) {
+    static uint16_t previous;
+    @synchronized (VCPreferences.class) {
+        uint64_t milliseconds = (uint64_t)llround(
+            MAX(0.0, NSProcessInfo.processInfo.systemUptime) * 1000.0);
+        uint16_t candidate = (uint16_t)(milliseconds & UINT16_MAX);
+        if (candidate == 0 || candidate == previous) candidate = previous + 1;
+        if (candidate == 0) candidate = 1;
+        previous = candidate;
+        return candidate;
+    }
+}
+
+static VCRuntimeConfigurationSnapshot *VCReadRuntimeConfiguration(
+    NSString *bundleIdentifier) {
+    uint64_t metadataBefore = 0;
+    if (!VCReadRuntimeState(VCRuntimeConfigurationNotification,
+                            &metadataBefore)) return nil;
+    uint16_t magic = (uint16_t)(metadataBefore >> 48);
+    if (magic != VCRuntimeConfigurationMagic) return nil;
+    uint16_t generation = (uint16_t)((metadataBefore >> 32) & UINT16_MAX);
+    uint8_t flags = (uint8_t)((metadataBefore >> 24) & UINT8_MAX);
+    NSUInteger length = (NSUInteger)((metadataBefore >> 12) & 0xFFF);
+    uint16_t expectedChecksum = (uint16_t)(metadataBefore & 0xFFF);
+    if (length > VCRuntimeMaximumURLBytes) return nil;
+
+    NSMutableData *urlData = [NSMutableData dataWithLength:length];
+    uint8_t *destination = urlData.mutableBytes;
+    NSUInteger chunkCount = (length + 7) / 8;
+    for (NSUInteger chunk = 0; chunk < chunkCount; chunk++) {
+        uint64_t packed = 0;
+        if (!VCReadRuntimeState(VCURLChunkRuntimeNotification(chunk), &packed)) {
+            return nil;
+        }
+        NSUInteger chunkLength = MIN((NSUInteger)8, length - chunk * 8);
+        for (NSUInteger byte = 0; byte < chunkLength; byte++) {
+            destination[chunk * 8 + byte] = (uint8_t)(packed >> (byte * 8));
+        }
+    }
+    uint64_t metadataAfter = 0;
+    if (!VCReadRuntimeState(VCRuntimeConfigurationNotification,
+                            &metadataAfter) || metadataAfter != metadataBefore) {
+        return nil;
+    }
+    if (((uint16_t)VCFNV1a64(urlData) & 0xFFF) != expectedChecksum) {
+        return nil;
+    }
+
+    NSString *urlString = length > 0
+        ? [[NSString alloc] initWithData:urlData encoding:NSUTF8StringEncoding]
+        : nil;
+    if (length > 0 && !urlString) return nil;
+
+    BOOL hasTargetFilter = (flags & (1U << 1)) != 0;
+    BOOL selected = !hasTargetFilter;
+    if (hasTargetFilter && bundleIdentifier.length > 0) {
+        uint64_t targetState = 0;
+        if (VCReadRuntimeState(VCTargetRuntimeNotification(bundleIdentifier),
+                               &targetState) &&
+            (uint16_t)(targetState >> 48) == VCRuntimeConfigurationMagic &&
+            (uint16_t)((targetState >> 32) & UINT16_MAX) == generation) {
+            selected = (targetState & 1) != 0;
+        }
+    }
+    VCRuntimeConfigurationSnapshot *configuration =
+        [VCRuntimeConfigurationSnapshot new];
+    configuration.enabled = (flags & 1U) != 0;
+    configuration.hasTargetFilter = hasTargetFilter;
+    configuration.currentProcessSelected = selected;
+    configuration.sourceType = (VCSourceType)((flags >> 2) & 0x3);
+    configuration.streamURLString = urlString;
+    return configuration;
+}
 
 @interface VCPreferences ()
 @property (atomic, assign, readwrite, getter=isEnabled) BOOL enabled;
@@ -46,6 +188,9 @@ static NSString * const VCPreferencesPath = @"/var/mobile/Library/Preferences/co
 @property (atomic, assign, readwrite) NSTimeInterval staleFrameTimeout;
 @property (atomic, copy, readwrite) NSString *sourceRestartToken;
 @property (atomic, copy, readwrite) NSSet<NSString *> *targetBundleIdentifiers;
+@property (atomic, assign) BOOL publishedConfigurationAvailable;
+@property (atomic, assign) BOOL publishedHasTargetBundleFilter;
+@property (atomic, assign) BOOL publishedCurrentProcessSelected;
 @end
 
 @implementation VCPreferences
@@ -176,6 +321,8 @@ BOOL VCTargetCaptureIsActive(NSTimeInterval maximumAge) {
     id staleFrameTimeoutValue = VCReadPreference(VCStaleFrameTimeoutKey);
     id sourceRestartTokenValue = VCReadPreference(VCSourceRestartTokenKey);
     id targetBundleIdentifiersValue = VCReadPreference(VCTargetBundleIdentifiersKey);
+    VCRuntimeConfigurationSnapshot *runtimeConfiguration =
+        VCReadRuntimeConfiguration(NSBundle.mainBundle.bundleIdentifier);
 
     enabledValue = enabledValue ?: directPreferences[VCEnabledKey];
     streamValue = streamValue ?: directPreferences[VCStreamURLKey];
@@ -196,6 +343,16 @@ BOOL VCTargetCaptureIsActive(NSTimeInterval maximumAge) {
         directPreferences[VCSourceRestartTokenKey];
     targetBundleIdentifiersValue = targetBundleIdentifiersValue ?:
         directPreferences[VCTargetBundleIdentifiersKey];
+
+    // Only sandboxed clients need the bridge. Privileged producers must keep
+    // the canonical plist authoritative and must never revive a stale notify
+    // snapshot while publishing the next generation.
+    BOOL useRuntimeConfiguration = runtimeConfiguration && !directPreferences;
+    if (useRuntimeConfiguration) {
+        enabledValue = enabledValue ?: @(runtimeConfiguration.enabled);
+        sourceTypeValue = sourceTypeValue ?: @(runtimeConfiguration.sourceType);
+        streamValue = streamValue ?: runtimeConfiguration.streamURLString;
+    }
 
     // Read the original project's preference file as a migration fallback.
     if (!enabledValue || !streamValue) {
@@ -322,18 +479,29 @@ BOOL VCTargetCaptureIsActive(NSTimeInterval maximumAge) {
         self.staleFrameTimeout = staleFrameTimeout;
         self.sourceRestartToken = sourceRestartToken;
         self.targetBundleIdentifiers = targetBundleIdentifiers;
+        self.publishedConfigurationAvailable = useRuntimeConfiguration;
+        self.publishedHasTargetBundleFilter = runtimeConfiguration.hasTargetFilter;
+        self.publishedCurrentProcessSelected =
+            runtimeConfiguration.currentProcessSelected;
         return changed;
     }
 }
 
 - (BOOL)hasTargetBundleFilter {
     @synchronized (self) {
+        if (self.publishedConfigurationAvailable) {
+            return self.publishedHasTargetBundleFilter;
+        }
         return self.targetBundleIdentifiers.count > 0;
     }
 }
 
 - (BOOL)isBundleIdentifierSelected:(NSString *)bundleIdentifier {
     @synchronized (self) {
+        if (self.publishedConfigurationAvailable &&
+            [bundleIdentifier isEqualToString:NSBundle.mainBundle.bundleIdentifier]) {
+            return self.publishedCurrentProcessSelected;
+        }
         if (self.targetBundleIdentifiers.count == 0) return YES;
         return bundleIdentifier.length > 0 &&
             [self.targetBundleIdentifiers containsObject:bundleIdentifier];
@@ -342,6 +510,58 @@ BOOL VCTargetCaptureIsActive(NSTimeInterval maximumAge) {
 
 - (BOOL)isCurrentProcessSelected {
     return [self isBundleIdentifierSelected:NSBundle.mainBundle.bundleIdentifier];
+}
+
+- (void)publishSharedConfiguration {
+    BOOL enabled = NO;
+    VCSourceType sourceType = VCSourceTypeNetwork;
+    NSString *streamURLString = nil;
+    NSSet<NSString *> *targets = nil;
+    @synchronized (self) {
+        enabled = self.enabled;
+        sourceType = self.sourceType;
+        streamURLString = sourceType == VCSourceTypeNetwork
+            ? self.streamURL.absoluteString : nil;
+        targets = [self.targetBundleIdentifiers copy];
+    }
+
+    NSData *urlData = [streamURLString dataUsingEncoding:NSUTF8StringEncoding];
+    if (urlData.length > VCRuntimeMaximumURLBytes) urlData = nil;
+    urlData = urlData ?: NSData.data;
+    uint16_t generation = VCNextRuntimeConfigurationGeneration();
+    const uint8_t *urlBytes = urlData.bytes;
+    NSUInteger chunkCount = (urlData.length + 7) / 8;
+    for (NSUInteger chunk = 0; chunk < chunkCount; chunk++) {
+        uint64_t packed = 0;
+        NSUInteger chunkLength = MIN((NSUInteger)8,
+                                     urlData.length - chunk * 8);
+        for (NSUInteger byte = 0; byte < chunkLength; byte++) {
+            packed |= ((uint64_t)urlBytes[chunk * 8 + byte]) << (byte * 8);
+        }
+        VCWriteRuntimeState(VCURLChunkRuntimeNotification(chunk), packed);
+    }
+
+    uint64_t targetState = ((uint64_t)VCRuntimeConfigurationMagic << 48) |
+                           ((uint64_t)generation << 32) | 1;
+    for (NSString *identifier in targets) {
+        if (identifier.length > 0) {
+            VCWriteRuntimeState(VCTargetRuntimeNotification(identifier),
+                                targetState);
+        }
+    }
+
+    uint8_t flags = enabled ? 1U : 0U;
+    if (targets.count > 0) flags |= 1U << 1;
+    flags |= ((uint8_t)sourceType & 0x3U) << 2;
+    uint16_t checksum = (uint16_t)VCFNV1a64(urlData) & 0xFFF;
+    uint64_t metadata = ((uint64_t)VCRuntimeConfigurationMagic << 48) |
+                        ((uint64_t)generation << 32) |
+                        ((uint64_t)flags << 24) |
+                        ((uint64_t)urlData.length << 12) |
+                        checksum;
+    if (VCWriteRuntimeState(VCRuntimeConfigurationNotification, metadata)) {
+        notify_post(VCRuntimeConfigurationNotification.UTF8String);
+    }
 }
 
 @end

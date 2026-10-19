@@ -1,7 +1,7 @@
 ﻿{
     "schemaVersion":  1,
     "toolName":  "VirtualCamPro Windows Control Center",
-    "toolVersion":  "2.24.2",
+    "toolVersion":  "2.24.3",
     "generatedAtUtc":  "2026-08-14T21:28:23.9143049Z",
     "sourceCommit":  "14ee1a5faf29e70b2a42247b9281baead0188dd2",
     "sourceDirty":  true,

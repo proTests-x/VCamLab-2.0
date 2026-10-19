@@ -1,4 +1,5 @@
 #import "VCPApplicationSelectorController.h"
+#import "../VCPreferences.h"
 
 #import <notify.h>
 #import <objc/message.h>
@@ -70,6 +71,8 @@ static void VCPWriteSelectedBundleIdentifiers(NSSet<NSString *> *identifiers) {
                              (__bridge CFArrayRef)sorted,
                              VCPPreferencesDomain);
     CFPreferencesAppSynchronize(VCPPreferencesDomain);
+    [VCPreferences.sharedPreferences reload];
+    [VCPreferences.sharedPreferences publishSharedConfiguration];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
                                          VCPPreferencesChangedNotification,
                                          NULL,
