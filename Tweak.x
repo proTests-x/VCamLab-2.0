@@ -27,6 +27,13 @@ static char VCPhotoReplacementModeAssociationKey;
 static char VCPhotoFileDataAssociationKey;
 static dispatch_once_t VCPhotoJPEGFallbackLogToken;
 static dispatch_once_t VCPhotoMetadataFailureLogToken;
+static dispatch_once_t VCStreamMonitoringToken;
+
+static void VCEnsureStreamMonitoring(void) {
+    dispatch_once(&VCStreamMonitoringToken, ^{
+        [[VCStreamCoordinator sharedCoordinator] startMonitoring];
+    });
+}
 
 static CFStringRef const VCReplacedSampleAttachmentKey =
     CFSTR(VC_SYSTEM_REPLACEMENT_ATTACHMENT_KEY);
@@ -216,6 +223,8 @@ didDropSampleBuffer:(CMSampleBufferRef)sampleBuffer
         %orig(delegate, queue);
         return;
     }
+
+    VCEnsureStreamMonitoring();
 
     VCVideoDataOutputProxy *proxy = [VCVideoDataOutputProxy new];
     proxy.originalDelegate = delegate;
@@ -458,6 +467,7 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
 
 static void VCEnsurePreviewOverlay(AVCaptureVideoPreviewLayer *previewLayer) {
     if (!previewLayer) return;
+    VCEnsureStreamMonitoring();
     if (![NSThread isMainThread]) {
         __weak AVCaptureVideoPreviewLayer *weakLayer = previewLayer;
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1009,7 +1019,11 @@ static NSData *VCPhotoDataByReplacingPrimaryImage(NSData *originalData,
             // start a second decoder or install application hooks here.
             return;
         }
-        [[VCStreamCoordinator sharedCoordinator] startMonitoring];
+        // Start the network decoder lazily when an application actually creates
+        // an AVCapture preview or installs a video-output delegate.  The class-
+        // based Substrate filter also reaches UIKit daemons that never open a
+        // camera; eagerly starting HLS there exhausts AVFoundation outputs and
+        // can destabilize mediaserverd.
         %init;
     }
 }

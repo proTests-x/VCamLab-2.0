@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$RootPath,
     [string]$BindAddress = "0.0.0.0",
@@ -9,71 +9,8 @@ param(
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = "Stop"
 
-function Write-HttpResponseHeader {
-    param(
-        [Parameter(Mandatory = $true)][IO.Stream]$Stream,
-        [Parameter(Mandatory = $true)][int]$StatusCode,
-        [Parameter(Mandatory = $true)][string]$Reason,
-        [Parameter(Mandatory = $true)][hashtable]$Headers
-    )
-    $builder = New-Object Text.StringBuilder
-    [void]$builder.AppendFormat("HTTP/1.1 {0} {1}`r`n", $StatusCode, $Reason)
-    foreach ($key in $Headers.Keys) {
-        [void]$builder.AppendFormat("{0}: {1}`r`n", $key, $Headers[$key])
-    }
-    [void]$builder.Append("`r`n")
-    $bytes = [Text.Encoding]::ASCII.GetBytes($builder.ToString())
-    $Stream.Write($bytes, 0, $bytes.Length)
-}
-
-function Send-SimpleResponse {
-    param(
-        [Parameter(Mandatory = $true)][IO.Stream]$Stream,
-        [Parameter(Mandatory = $true)][int]$StatusCode,
-        [Parameter(Mandatory = $true)][string]$Reason,
-        [AllowEmptyString()][string]$Body = ""
-    )
-    $bodyBytes = [Text.Encoding]::UTF8.GetBytes($Body)
-    Write-HttpResponseHeader -Stream $Stream -StatusCode $StatusCode -Reason $Reason -Headers @{
-        "Content-Type" = "text/plain; charset=utf-8"
-        "Content-Length" = [string]$bodyBytes.Length
-        "Cache-Control" = "no-store"
-        "Access-Control-Allow-Origin" = "*"
-        "X-Content-Type-Options" = "nosniff"
-        "Connection" = "close"
-    }
-    if ($bodyBytes.Length -gt 0) {
-        $Stream.Write($bodyBytes, 0, $bodyBytes.Length)
-    }
-}
-
-function Get-RequestHeaders {
-    param([Parameter(Mandatory = $true)][IO.TextReader]$Reader)
-    $headers = @{}
-    $lineCount = 0
-    $totalCharacters = 0
-    while ($true) {
-        $line = $Reader.ReadLine()
-        if ($null -eq $line -or $line.Length -eq 0) { break }
-        $lineCount++
-        $totalCharacters += $line.Length
-        if ($lineCount -gt 100 -or $totalCharacters -gt 65536 -or $line.Length -gt 8192) {
-            throw "HTTP request headers exceed the safety limit."
-        }
-        $separator = $line.IndexOf(':')
-        if ($separator -le 0) { continue }
-        $name = $line.Substring(0, $separator).Trim().ToLowerInvariant()
-        $value = $line.Substring($separator + 1).Trim()
-        if ($name.Length -eq 0 -or $name.Length -gt 256) { continue }
-        $headers[$name] = $value
-    }
-    return $headers
-}
-
 $root = [IO.Path]::GetFullPath($RootPath)
 [IO.Directory]::CreateDirectory($root) | Out-Null
-$rootPrefix = $root.TrimEnd([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)) +
-    [IO.Path]::DirectorySeparatorChar
 
 $bindIP = $null
 if (-not [Net.IPAddress]::TryParse($BindAddress, [ref]$bindIP) -or
@@ -89,197 +26,299 @@ if ([string]::IsNullOrWhiteSpace($PlaylistName) -or
     throw "PlaylistName must be a simple .m3u8 file name."
 }
 
-$listener = New-Object Net.Sockets.TcpListener -ArgumentList $bindIP, $Port
-$listener.Server.NoDelay = $true
-$listener.Start(64)
+# AVPlayer fetches a live playlist and media segments concurrently. The old
+# single-client loop could remain blocked on one keep-alive/partial request and
+# starve every other request, leaving AVPlayer permanently without a first
+# frame. Keep protocol handling in a small C# worker so each accepted socket is
+# served independently without requiring a PowerShell runspace per segment.
+$serverSource = @'
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
 
-try {
-    while ($true) {
-        $client = $listener.AcceptTcpClient()
-        $stream = $null
-        $reader = $null
-        try {
-            $client.NoDelay = $true
-            $client.ReceiveTimeout = 5000
-            $client.SendTimeout = 15000
-            $stream = $client.GetStream()
-            $reader = New-Object IO.StreamReader -ArgumentList @($stream, [Text.Encoding]::ASCII, $false, 8192, $true)
-            $requestLine = $reader.ReadLine()
-            if ([string]::IsNullOrWhiteSpace($requestLine)) {
-                continue
-            }
-            if ($requestLine.Length -gt 8192) {
-                Send-SimpleResponse -Stream $stream -StatusCode 414 -Reason "URI Too Long" -Body "URI Too Long"
-                continue
-            }
-            $parts = $requestLine.Split(' ')
-            if ($parts.Count -lt 2) {
-                Send-SimpleResponse -Stream $stream -StatusCode 400 -Reason "Bad Request" -Body "Bad Request"
-                continue
-            }
-            $method = $parts[0].ToUpperInvariant()
-            $target = $parts[1]
-            if ($target.Length -gt 4096) {
-                Send-SimpleResponse -Stream $stream -StatusCode 414 -Reason "URI Too Long" -Body "URI Too Long"
-                continue
-            }
-            $headers = Get-RequestHeaders -Reader $reader
+namespace VirtualCamPro
+{
+    public static class HlsServer
+    {
+        private static readonly Regex SegmentPattern = new Regex(
+            @"^segment_[0-9]{6,12}[.]ts$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly Regex RangePattern = new Regex(
+            @"^bytes=(?<start>[0-9]*)-(?<end>[0-9]*)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+        private static readonly SemaphoreSlim ClientSlots = new SemaphoreSlim(64, 64);
+        private static string root;
+        private static string rootPrefix;
+        private static string playlistName;
 
-            if ($method -eq "OPTIONS") {
-                Write-HttpResponseHeader -Stream $stream -StatusCode 204 -Reason "No Content" -Headers @{
-                    "Content-Length" = "0"
-                    "Access-Control-Allow-Origin" = "*"
-                    "Access-Control-Allow-Methods" = "GET, HEAD, OPTIONS"
-                    "Access-Control-Allow-Headers" = "Range"
-                    "Connection" = "close"
-                }
-                continue
-            }
-            if ($method -notin @("GET", "HEAD")) {
-                $bodyBytes = [Text.Encoding]::UTF8.GetBytes("Method Not Allowed")
-                Write-HttpResponseHeader -Stream $stream -StatusCode 405 -Reason "Method Not Allowed" -Headers @{
-                    "Content-Type" = "text/plain; charset=utf-8"
-                    "Content-Length" = [string]$bodyBytes.Length
-                    "Allow" = "GET, HEAD, OPTIONS"
-                    "Cache-Control" = "no-store"
-                    "Access-Control-Allow-Origin" = "*"
-                    "X-Content-Type-Options" = "nosniff"
-                    "Connection" = "close"
-                }
-                $stream.Write($bodyBytes, 0, $bodyBytes.Length)
-                continue
-            }
-
-            $rawPath = ($target -split '[?]', 2)[0]
-            try { $requestPath = [Uri]::UnescapeDataString($rawPath) } catch { $requestPath = "" }
-            if ($requestPath -eq "/") { $requestPath = "/$PlaylistName" }
-            $relativePath = $requestPath.TrimStart('/')
-            $allowed = $relativePath -eq $PlaylistName -or $relativePath -match '^segment_[0-9]{6,12}[.]ts$'
-            if (-not $allowed) {
-                Send-SimpleResponse -Stream $stream -StatusCode 404 -Reason "Not Found" -Body "Not Found"
-                continue
-            }
-
-            $fullPath = [IO.Path]::GetFullPath((Join-Path $root $relativePath))
-            if (-not $fullPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-                Send-SimpleResponse -Stream $stream -StatusCode 403 -Reason "Forbidden" -Body "Forbidden"
-                continue
-            }
-            if ($relativePath -eq $PlaylistName -and
-                -not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-                # The HTTP listener starts just before FFmpeg. Give the first HLS
-                # playlist request a short grace period instead of returning a
-                # startup-race 404 that some players treat as fatal.
-                for ($attempt = 0; $attempt -lt 20; $attempt++) {
-                    Start-Sleep -Milliseconds 100
-                    if (Test-Path -LiteralPath $fullPath -PathType Leaf) { break }
+        public static void Run(string rootPath, string bindAddress, int port, string playlist)
+        {
+            root = Path.GetFullPath(rootPath);
+            rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) +
+                Path.DirectorySeparatorChar;
+            playlistName = playlist;
+            ThreadPool.SetMinThreads(16, 16);
+            TcpListener listener = new TcpListener(IPAddress.Parse(bindAddress), port);
+            listener.Server.NoDelay = true;
+            listener.Start(64);
+            try
+            {
+                while (true)
+                {
+                    TcpClient client = listener.AcceptTcpClient();
+                    if (!ClientSlots.Wait(0))
+                    {
+                        client.Close();
+                        continue;
+                    }
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try { HandleClient(client); }
+                        finally
+                        {
+                            try { client.Close(); } catch { }
+                            ClientSlots.Release();
+                        }
+                    });
                 }
             }
-            if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) {
-                Send-SimpleResponse -Stream $stream -StatusCode 404 -Reason "Not Found" -Body "Not Found"
-                continue
+            finally
+            {
+                listener.Stop();
             }
+        }
 
-            $share = [IO.FileShare]([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
-            $file = [IO.File]::Open($fullPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, $share)
-            try {
-                $length = [long]$file.Length
-                $start = [long]0
-                $end = [long]([Math]::Max(0, $length - 1))
-                $partial = $false
-                if ($headers.ContainsKey("range")) {
-                    $match = [regex]::Match([string]$headers["range"], '^bytes=(?<start>[0-9]*)-(?<end>[0-9]*)$')
-                    if ($match.Success -and $length -gt 0) {
-                        $startText = $match.Groups["start"].Value
-                        $endText = $match.Groups["end"].Value
-                        if ($startText.Length -eq 0 -and $endText.Length -gt 0) {
-                            $suffixLength = [long]$endText
-                            if ($suffixLength -gt 0) {
-                                $start = [Math]::Max([long]0, $length - $suffixLength)
-                                $end = $length - 1
-                            }
-                            else {
-                                $end = -1
+        private static void HandleClient(TcpClient client)
+        {
+            client.NoDelay = true;
+            client.ReceiveTimeout = 5000;
+            client.SendTimeout = 15000;
+            using (NetworkStream stream = client.GetStream())
+            using (StreamReader reader = new StreamReader(stream, Encoding.ASCII, false, 8192, true))
+            {
+                try
+                {
+                    string requestLine = reader.ReadLine();
+                    if (String.IsNullOrWhiteSpace(requestLine)) return;
+                    if (requestLine.Length > 8192)
+                    {
+                        SendSimple(stream, 414, "URI Too Long", "URI Too Long", false);
+                        return;
+                    }
+                    string[] parts = requestLine.Split(' ');
+                    if (parts.Length < 2)
+                    {
+                        SendSimple(stream, 400, "Bad Request", "Bad Request", false);
+                        return;
+                    }
+                    string method = parts[0].ToUpperInvariant();
+                    string target = parts[1];
+                    if (target.Length > 4096)
+                    {
+                        SendSimple(stream, 414, "URI Too Long", "URI Too Long", method == "HEAD");
+                        return;
+                    }
+                    Dictionary<string, string> headers = ReadHeaders(reader);
+                    if (method == "OPTIONS")
+                    {
+                        SendHeaders(stream, 204, "No Content", new Dictionary<string, string>
+                        {
+                            { "Content-Length", "0" },
+                            { "Access-Control-Allow-Origin", "*" },
+                            { "Access-Control-Allow-Methods", "GET, HEAD, OPTIONS" },
+                            { "Access-Control-Allow-Headers", "Range" },
+                            { "Connection", "close" }
+                        });
+                        return;
+                    }
+                    if (method != "GET" && method != "HEAD")
+                    {
+                        byte[] body = Encoding.UTF8.GetBytes("Method Not Allowed");
+                        SendHeaders(stream, 405, "Method Not Allowed", new Dictionary<string, string>
+                        {
+                            { "Content-Type", "text/plain; charset=utf-8" },
+                            { "Content-Length", body.Length.ToString() },
+                            { "Allow", "GET, HEAD, OPTIONS" },
+                            { "Cache-Control", "no-store" },
+                            { "Access-Control-Allow-Origin", "*" },
+                            { "X-Content-Type-Options", "nosniff" },
+                            { "Connection", "close" }
+                        });
+                        stream.Write(body, 0, body.Length);
+                        return;
+                    }
+
+                    int query = target.IndexOf('?');
+                    string rawPath = query >= 0 ? target.Substring(0, query) : target;
+                    string requestPath;
+                    try { requestPath = Uri.UnescapeDataString(rawPath); }
+                    catch { requestPath = String.Empty; }
+                    if (requestPath == "/") requestPath = "/" + playlistName;
+                    string relativePath = requestPath.TrimStart('/');
+                    bool allowed = relativePath == playlistName || SegmentPattern.IsMatch(relativePath);
+                    if (!allowed)
+                    {
+                        SendSimple(stream, 404, "Not Found", "Not Found", method == "HEAD");
+                        return;
+                    }
+
+                    string fullPath = Path.GetFullPath(Path.Combine(root, relativePath));
+                    if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SendSimple(stream, 403, "Forbidden", "Forbidden", method == "HEAD");
+                        return;
+                    }
+                    if (relativePath == playlistName && !File.Exists(fullPath))
+                    {
+                        for (int attempt = 0; attempt < 20 && !File.Exists(fullPath); attempt++)
+                            Thread.Sleep(100);
+                    }
+                    if (!File.Exists(fullPath))
+                    {
+                        SendSimple(stream, 404, "Not Found", "Not Found", method == "HEAD");
+                        return;
+                    }
+
+                    using (FileStream file = new FileStream(fullPath, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite | FileShare.Delete))
+                    {
+                        long length = file.Length;
+                        long start = 0;
+                        long end = Math.Max(0, length - 1);
+                        bool partial = false;
+                        string rangeValue;
+                        if (headers.TryGetValue("range", out rangeValue))
+                        {
+                            Match match = RangePattern.Match(rangeValue);
+                            if (match.Success && length > 0)
+                            {
+                                string startText = match.Groups["start"].Value;
+                                string endText = match.Groups["end"].Value;
+                                if (startText.Length == 0 && endText.Length > 0)
+                                {
+                                    long suffixLength;
+                                    if (Int64.TryParse(endText, out suffixLength) && suffixLength > 0)
+                                    {
+                                        start = Math.Max(0, length - suffixLength);
+                                        end = length - 1;
+                                    }
+                                    else end = -1;
+                                }
+                                else
+                                {
+                                    long parsed;
+                                    if (startText.Length > 0 && Int64.TryParse(startText, out parsed)) start = parsed;
+                                    if (endText.Length > 0 && Int64.TryParse(endText, out parsed))
+                                        end = Math.Min(parsed, length - 1);
+                                }
+                                if (start >= 0 && start < length && end >= start) partial = true;
+                                else
+                                {
+                                    SendHeaders(stream, 416, "Range Not Satisfiable", new Dictionary<string, string>
+                                    {
+                                        { "Content-Range", "bytes */" + length },
+                                        { "Content-Length", "0" },
+                                        { "Accept-Ranges", "bytes" },
+                                        { "Access-Control-Allow-Origin", "*" },
+                                        { "Cache-Control", "no-store" },
+                                        { "Connection", "close" }
+                                    });
+                                    return;
+                                }
                             }
                         }
-                        else {
-                            if ($startText.Length -gt 0) {
-                                $start = [long]$startText
-                            }
-                            if ($endText.Length -gt 0) {
-                                $end = [Math]::Min([long]$endText, $length - 1)
-                            }
-                        }
-                        if ($start -ge 0 -and $start -lt $length -and $end -ge $start) {
-                            $partial = $true
-                        } else {
-                            Write-HttpResponseHeader -Stream $stream -StatusCode 416 -Reason "Range Not Satisfiable" -Headers @{
-                                "Content-Range" = "bytes */$length"
-                                "Content-Length" = "0"
-                                "Accept-Ranges" = "bytes"
-                                "Access-Control-Allow-Origin" = "*"
-                                "Access-Control-Expose-Headers" = "Content-Length, Content-Range, Accept-Ranges"
-                                "Cache-Control" = "no-store"
-                                "X-Content-Type-Options" = "nosniff"
-                                "Connection" = "close"
-                            }
-                            continue
+                        long count = length == 0 ? 0 : end - start + 1;
+                        bool isPlaylist = relativePath.EndsWith(".m3u8", StringComparison.OrdinalIgnoreCase);
+                        Dictionary<string, string> responseHeaders = new Dictionary<string, string>
+                        {
+                            { "Content-Type", isPlaylist ? "application/vnd.apple.mpegurl" : "video/mp2t" },
+                            { "Content-Length", count.ToString() },
+                            { "Accept-Ranges", "bytes" },
+                            { "Access-Control-Allow-Origin", "*" },
+                            { "Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges" },
+                            { "X-Content-Type-Options", "nosniff" },
+                            { "Connection", "close" },
+                            { "Cache-Control", isPlaylist ? "no-cache, no-store, must-revalidate" : "public, max-age=30" }
+                        };
+                        if (partial) responseHeaders["Content-Range"] =
+                            "bytes " + start + "-" + end + "/" + length;
+                        SendHeaders(stream, partial ? 206 : 200, partial ? "Partial Content" : "OK",
+                            responseHeaders);
+                        if (method == "HEAD" || count == 0) return;
+                        file.Position = start;
+                        byte[] buffer = new byte[65536];
+                        long remaining = count;
+                        while (remaining > 0)
+                        {
+                            int read = file.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                            if (read <= 0) break;
+                            stream.Write(buffer, 0, read);
+                            remaining -= read;
                         }
                     }
                 }
-                $count = if ($length -eq 0) { [long]0 } else { [long]($end - $start + 1) }
-                $contentType = if ($relativePath.EndsWith(".m3u8", [StringComparison]::OrdinalIgnoreCase)) {
-                    "application/vnd.apple.mpegurl"
-                } else {
-                    "video/mp2t"
+                catch
+                {
+                    try { SendSimple(stream, 500, "Internal Server Error", "Internal Server Error", false); }
+                    catch { }
                 }
-                $responseHeaders = @{
-                    "Content-Type" = $contentType
-                    "Content-Length" = [string]$count
-                    "Accept-Ranges" = "bytes"
-                    "Access-Control-Allow-Origin" = "*"
-                    "Access-Control-Expose-Headers" = "Content-Length, Content-Range, Accept-Ranges"
-                    "X-Content-Type-Options" = "nosniff"
-                    "Connection" = "close"
-                    "Cache-Control" = $(if ($contentType -eq "application/vnd.apple.mpegurl") {
-                        "no-cache, no-store, must-revalidate"
-                    } else {
-                        "public, max-age=30"
-                    })
-                }
-                if ($partial) {
-                    $responseHeaders["Content-Range"] = "bytes $start-$end/$length"
-                    Write-HttpResponseHeader -Stream $stream -StatusCode 206 -Reason "Partial Content" -Headers $responseHeaders
-                } else {
-                    Write-HttpResponseHeader -Stream $stream -StatusCode 200 -Reason "OK" -Headers $responseHeaders
-                }
-                if ($method -eq "HEAD" -or $count -eq 0) { continue }
-
-                $file.Position = $start
-                $buffer = New-Object byte[] 65536
-                $remaining = $count
-                while ($remaining -gt 0) {
-                    $toRead = [int][Math]::Min([long]$buffer.Length, $remaining)
-                    $read = $file.Read($buffer, 0, $toRead)
-                    if ($read -le 0) { break }
-                    $stream.Write($buffer, 0, $read)
-                    $remaining -= $read
-                }
-            } finally {
-                $file.Dispose()
             }
-        } catch {
-            try {
-                if ($client.Connected) {
-                    Send-SimpleResponse -Stream $client.GetStream() -StatusCode 500 -Reason "Internal Server Error" -Body "Internal Server Error"
-                }
-            } catch {}
-        } finally {
-            if ($reader) { try { $reader.Dispose() } catch {} }
-            if ($stream) { try { $stream.Dispose() } catch {} }
-            $client.Dispose()
+        }
+
+        private static Dictionary<string, string> ReadHeaders(StreamReader reader)
+        {
+            Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int lineCount = 0;
+            int totalCharacters = 0;
+            while (true)
+            {
+                string line = reader.ReadLine();
+                if (line == null || line.Length == 0) break;
+                lineCount++;
+                totalCharacters += line.Length;
+                if (lineCount > 100 || totalCharacters > 65536 || line.Length > 8192)
+                    throw new InvalidDataException("HTTP request headers exceed the safety limit.");
+                int separator = line.IndexOf(':');
+                if (separator <= 0) continue;
+                string name = line.Substring(0, separator).Trim().ToLowerInvariant();
+                if (name.Length == 0 || name.Length > 256) continue;
+                headers[name] = line.Substring(separator + 1).Trim();
+            }
+            return headers;
+        }
+
+        private static void SendSimple(Stream stream, int status, string reason, string body, bool head)
+        {
+            byte[] bodyBytes = Encoding.UTF8.GetBytes(body ?? String.Empty);
+            SendHeaders(stream, status, reason, new Dictionary<string, string>
+            {
+                { "Content-Type", "text/plain; charset=utf-8" },
+                { "Content-Length", bodyBytes.Length.ToString() },
+                { "Cache-Control", "no-store" },
+                { "Access-Control-Allow-Origin", "*" },
+                { "X-Content-Type-Options", "nosniff" },
+                { "Connection", "close" }
+            });
+            if (!head && bodyBytes.Length > 0) stream.Write(bodyBytes, 0, bodyBytes.Length);
+        }
+
+        private static void SendHeaders(Stream stream, int status, string reason,
+            IDictionary<string, string> headers)
+        {
+            StringBuilder builder = new StringBuilder();
+            builder.AppendFormat("HTTP/1.1 {0} {1}\r\n", status, reason);
+            foreach (KeyValuePair<string, string> header in headers)
+                builder.AppendFormat("{0}: {1}\r\n", header.Key, header.Value);
+            builder.Append("\r\n");
+            byte[] bytes = Encoding.ASCII.GetBytes(builder.ToString());
+            stream.Write(bytes, 0, bytes.Length);
         }
     }
-} finally {
-    $listener.Stop()
 }
+'@
+
+Add-Type -TypeDefinition $serverSource -Language CSharp
+[VirtualCamPro.HlsServer]::Run($root, $BindAddress, $Port, $PlaylistName)

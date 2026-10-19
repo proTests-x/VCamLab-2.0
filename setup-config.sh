@@ -2,6 +2,9 @@
 set -eu
 
 PREF_PATH="/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"
+if [ -d "/var/jb/var/mobile/Library/Preferences" ]; then
+    PREF_PATH="/var/jb/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist"
+fi
 TEMP_PREF_PATH="${PREF_PATH}.tmp.$$"
 STREAM_URL="${1:-}"
 PREFERRED_FPS="${2:-60}"

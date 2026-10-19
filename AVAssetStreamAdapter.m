@@ -404,8 +404,28 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
     item.preferredForwardBufferDuration = 0.25;
     AVPlayerItemVideoOutput *output = [[AVPlayerItemVideoOutput alloc]
                                        initWithPixelBufferAttributes:pixelBufferAttributes];
+    if (!output) {
+        NSError *error = [NSError errorWithDomain:VCStreamErrorDomain
+                                             code:1006
+                                         userInfo:@{NSLocalizedDescriptionKey:
+                                                        @"AVFoundation could not create an HLS video output"}];
+        [self scheduleReconnectAfterError:error];
+        return;
+    }
     output.suppressesPlayerRendering = YES;
-    [item addOutput:output];
+    @try {
+        [item addOutput:output];
+    } @catch (NSException *exception) {
+        NSString *description = [NSString stringWithFormat:
+            @"AVFoundation rejected the HLS video output: %@",
+            exception.reason ?: exception.name];
+        NSLog(@"[VirtualCamPro] %@", description);
+        NSError *error = [NSError errorWithDomain:VCStreamErrorDomain
+                                             code:1007
+                                         userInfo:@{NSLocalizedDescriptionKey: description}];
+        [self scheduleReconnectAfterError:error];
+        return;
+    }
 
     self.hlsPlayerItem = item;
     self.videoOutput = output;
@@ -458,6 +478,8 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
     if (item != self.hlsPlayerItem || !self.running) return;
 
     if (item.status == AVPlayerItemStatusReadyToPlay) {
+        NSLog(@"[VirtualCamPro] HLS player ready in %@",
+              NSProcessInfo.processInfo.processName);
         @synchronized (self) {
             self.connecting = NO;
             self.reconnectAttempt = 0;
@@ -468,6 +490,9 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
         NSError *error = item.error ?: [NSError errorWithDomain:VCStreamErrorDomain
                                                                code:1001
                                                            userInfo:@{NSLocalizedDescriptionKey: @"HLS stream failed to load"}];
+        NSLog(@"[VirtualCamPro] HLS player failed in %@: %@",
+              NSProcessInfo.processInfo.processName,
+              error.localizedDescription);
         [self scheduleReconnectAfterError:error];
     }
 }
@@ -511,9 +536,11 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
 }
 
 - (void)stopHLSStreamImmediately {
-    AVAsset *loadingAsset = self.hlsPlayerItem.asset;
-    if (self.observingPlayerItem && self.hlsPlayerItem) {
-        [self.hlsPlayerItem removeObserver:self forKeyPath:@"status" context:VCPlayerItemStatusContext];
+    AVPlayerItem *item = self.hlsPlayerItem;
+    AVPlayerItemVideoOutput *output = self.videoOutput;
+    AVAsset *loadingAsset = item.asset;
+    if (self.observingPlayerItem && item) {
+        [item removeObserver:self forKeyPath:@"status" context:VCPlayerItemStatusContext];
         self.observingPlayerItem = NO;
     }
 
@@ -530,6 +557,13 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
     _hlsPollingFPS = 0;
     [self.hlsPlayer pause];
     self.hlsLiveEdgeSeekInProgress = NO;
+    if (item && output && [item.outputs containsObject:output]) {
+        @try {
+            [item removeOutput:output];
+        } @catch (__unused NSException *exception) {
+            // The item may already be tearing down after a failed load.
+        }
+    }
     self.hlsPlayer = nil;
     self.hlsPlayerItem = nil;
     self.videoOutput = nil;
