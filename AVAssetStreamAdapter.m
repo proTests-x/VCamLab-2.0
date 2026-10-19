@@ -401,7 +401,7 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
     // This is a live camera feed, not on-demand playback.  AVPlayer still owns
     // protocol adaptation, but it must not intentionally build a second phone-
     // side quality/rate buffer on top of the sender's live window.
-    item.preferredForwardBufferDuration = 0.25;
+    item.preferredForwardBufferDuration = 1.5;
     AVPlayerItemVideoOutput *output = [[AVPlayerItemVideoOutput alloc]
                                        initWithPixelBufferAttributes:pixelBufferAttributes];
     if (!output) {
@@ -523,10 +523,16 @@ static CGColorSpaceRef VCSharedRGBColorSpace(void) {
 }
 
 - (void)playerItemPlaybackStalled:(NSNotification *)notification {
-    NSError *error = [NSError errorWithDomain:VCStreamErrorDomain
-                                         code:1002
-                                     userInfo:@{NSLocalizedDescriptionKey: @"HLS playback stalled"}];
-    [self scheduleReconnectAfterError:error];
+    if (!self.running || notification.object != self.hlsPlayerItem) return;
+    // AVPlayer can emit this notification while a live playlist is merely
+    // waiting for its next one-second segment.  Rebuilding the player here
+    // turns that harmless startup underrun into a permanent reconnect loop.
+    // Resume toward the live edge and let the health monitor reconnect only
+    // if frames are actually absent for its full timeout window.
+    NSLog(@"[VirtualCamPro] HLS playback briefly stalled in %@; waiting for the live playlist",
+          NSProcessInfo.processInfo.processName);
+    [self catchUpToHLSLiveEdgeIfNeeded];
+    [self.hlsPlayer play];
 }
 
 - (void)stopHLSStream {

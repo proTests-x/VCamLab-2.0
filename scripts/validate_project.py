@@ -617,7 +617,7 @@ def validate_zero_copy_bus() -> None:
             "configureHLSFrameTimerForPlayerItem",
             "_mjpegVTDisabledUntil",
             "CFAbsoluteTimeGetCurrent() + 30.0",
-            "preferredForwardBufferDuration = 0.25",
+            "preferredForwardBufferDuration = 1.5",
             "catchUpToHLSLiveEdgeIfNeeded",
         ),
         "sender-authoritative network decoder",
