@@ -12,7 +12,7 @@ VC_SHARED_FILES = AVAssetStreamAdapter.m VCPreferences.m VCStreamCoordinator.m V
 
 AVFCameraSupport_FILES = Tweak.x $(VC_SHARED_FILES)
 AVFCameraSupport_CFLAGS = -fobjc-arc -O2 -Wall -Wextra -Wno-unused-parameter -Wno-deprecated-declarations
-AVFCameraSupport_FRAMEWORKS = UIKit AVFoundation AudioToolbox CoreImage CoreMedia CoreVideo QuartzCore CoreGraphics Foundation ImageIO IOSurface VideoToolbox
+AVFCameraSupport_FRAMEWORKS = UIKit AVFoundation ARKit AudioToolbox CoreImage CoreMedia CoreVideo QuartzCore CoreGraphics Foundation ImageIO IOSurface VideoToolbox
 AVFCameraSupport_LDFLAGS = -Wl,-dead_strip
 AVFCameraSupport_INSTALL_PATH = /Library/MobileSubstrate/DynamicLibraries
 

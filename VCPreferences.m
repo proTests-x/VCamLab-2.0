@@ -1,6 +1,7 @@
 #import "VCPreferences.h"
 #import "VCPreferenceValidation.h"
 #import <float.h>
+#import <notify.h>
 #import <math.h>
 
 NSString * const VCPreferencesDomain = @"com.murkaska.virtualcampro";
@@ -22,6 +23,9 @@ NSString * const VCSourceRestartTokenKey = @"sourceRestartToken";
 NSString * const VCFloatingControlEnabledKey = @"floatingControlEnabled";
 NSString * const VCFloatingControlCenterXKey = @"floatingControlCenterX";
 NSString * const VCFloatingControlCenterYKey = @"floatingControlCenterY";
+NSString * const VCTargetBundleIdentifiersKey = @"targetBundleIdentifiers";
+const char * const VCTargetCaptureStateNotification =
+    "com.murkaska.virtualcampro/target-capture.state.v1";
 
 static NSString * const VCLegacyPreferencesPath = @"/var/mobile/Library/Preferences/com.apple.avfoundation.cs.plist";
 static NSString * const VCPreferencesPath = @"/var/mobile/Library/Preferences/com.murkaska.virtualcampro.plist";
@@ -41,6 +45,7 @@ static NSString * const VCPreferencesPath = @"/var/mobile/Library/Preferences/co
 @property (atomic, assign, readwrite) BOOL holdLastFrame;
 @property (atomic, assign, readwrite) NSTimeInterval staleFrameTimeout;
 @property (atomic, copy, readwrite) NSString *sourceRestartToken;
+@property (atomic, copy, readwrite) NSSet<NSString *> *targetBundleIdentifiers;
 @end
 
 @implementation VCPreferences
@@ -84,6 +89,68 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
     return [value boolValue];
 }
 
+static NSSet<NSString *> *VCReadTargetBundleIdentifiers(id value) {
+    if (![value isKindOfClass:NSArray.class] &&
+        ![value isKindOfClass:NSSet.class]) {
+        return [NSSet set];
+    }
+    NSMutableSet<NSString *> *result = [NSMutableSet set];
+    NSCharacterSet *whitespace = NSCharacterSet.whitespaceAndNewlineCharacterSet;
+    for (id candidate in value) {
+        if (![candidate isKindOfClass:NSString.class]) continue;
+        NSString *identifier = [candidate stringByTrimmingCharactersInSet:whitespace];
+        if (identifier.length == 0 || identifier.length > 255) continue;
+        if ([identifier rangeOfCharacterFromSet:whitespace].location != NSNotFound) continue;
+        [result addObject:identifier];
+        if (result.count >= 128) break;
+    }
+    return [result copy];
+}
+
+static int VCTargetCaptureNotifyToken(void) {
+    static int token = -1;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        int candidate = -1;
+        if (notify_register_check(VCTargetCaptureStateNotification, &candidate) == NOTIFY_STATUS_OK) {
+            token = candidate;
+        }
+    });
+    return token;
+}
+
+static uint64_t VCTargetCaptureTimestampMilliseconds(void) {
+    NSTimeInterval uptime = NSProcessInfo.processInfo.systemUptime;
+    if (!isfinite(uptime) || uptime <= 0) return 1;
+    long double milliseconds = (long double)uptime * 1000.0L;
+    if (milliseconds >= (long double)INT64_MAX) return INT64_MAX;
+    return (uint64_t)milliseconds;
+}
+
+void VCSetTargetCaptureActive(BOOL active) {
+    int token = VCTargetCaptureNotifyToken();
+    if (token < 0) return;
+    static const uint64_t activeMask = UINT64_C(1) << 63;
+    uint64_t state = VCTargetCaptureTimestampMilliseconds();
+    if (active) state |= activeMask;
+    if (notify_set_state(token, state) == NOTIFY_STATUS_OK) {
+        notify_post(VCTargetCaptureStateNotification);
+    }
+}
+
+BOOL VCTargetCaptureIsActive(NSTimeInterval maximumAge) {
+    int token = VCTargetCaptureNotifyToken();
+    if (token < 0 || !isfinite(maximumAge) || maximumAge <= 0) return NO;
+    uint64_t state = 0;
+    if (notify_get_state(token, &state) != NOTIFY_STATUS_OK) return NO;
+    static const uint64_t activeMask = UINT64_C(1) << 63;
+    if ((state & activeMask) == 0) return NO;
+    uint64_t timestamp = state & ~activeMask;
+    uint64_t now = VCTargetCaptureTimestampMilliseconds();
+    if (timestamp == 0 || now < timestamp) return NO;
+    return now - timestamp <= (uint64_t)llround(maximumAge * 1000.0);
+}
+
 - (BOOL)reload {
     CFPreferencesAppSynchronize((__bridge CFStringRef)VCPreferencesDomain);
 
@@ -108,6 +175,7 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
     id holdLastFrameValue = VCReadPreference(VCHoldLastFrameKey);
     id staleFrameTimeoutValue = VCReadPreference(VCStaleFrameTimeoutKey);
     id sourceRestartTokenValue = VCReadPreference(VCSourceRestartTokenKey);
+    id targetBundleIdentifiersValue = VCReadPreference(VCTargetBundleIdentifiersKey);
 
     enabledValue = enabledValue ?: directPreferences[VCEnabledKey];
     streamValue = streamValue ?: directPreferences[VCStreamURLKey];
@@ -126,6 +194,8 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
         directPreferences[VCStaleFrameTimeoutKey];
     sourceRestartTokenValue = sourceRestartTokenValue ?:
         directPreferences[VCSourceRestartTokenKey];
+    targetBundleIdentifiersValue = targetBundleIdentifiersValue ?:
+        directPreferences[VCTargetBundleIdentifiersKey];
 
     // Read the original project's preference file as a migration fallback.
     if (!enabledValue || !streamValue) {
@@ -188,6 +258,8 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
         [sourceRestartTokenValue length] <= 128) {
         sourceRestartToken = sourceRestartTokenValue;
     }
+    NSSet<NSString *> *targetBundleIdentifiers =
+        VCReadTargetBundleIdentifiers(targetBundleIdentifiersValue);
 
     NSURL *streamURL = nil;
     if ([streamValue isKindOfClass:[NSString class]] &&
@@ -230,6 +302,7 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
                        self.holdLastFrame != holdLastFrame ||
                        fabs(self.staleFrameTimeout - staleFrameTimeout) > DBL_EPSILON ||
                        ![self.sourceRestartToken isEqualToString:sourceRestartToken] ||
+                       ![self.targetBundleIdentifiers isEqualToSet:targetBundleIdentifiers] ||
                        !((self.streamURL == streamURL) || [self.streamURL isEqual:streamURL]) ||
                        !((self.localMediaURL == localMediaURL) ||
                          [self.localMediaURL isEqual:localMediaURL]);
@@ -248,8 +321,27 @@ static BOOL VCReadBooleanPreference(id value, BOOL defaultValue) {
         self.holdLastFrame = holdLastFrame;
         self.staleFrameTimeout = staleFrameTimeout;
         self.sourceRestartToken = sourceRestartToken;
+        self.targetBundleIdentifiers = targetBundleIdentifiers;
         return changed;
     }
+}
+
+- (BOOL)hasTargetBundleFilter {
+    @synchronized (self) {
+        return self.targetBundleIdentifiers.count > 0;
+    }
+}
+
+- (BOOL)isBundleIdentifierSelected:(NSString *)bundleIdentifier {
+    @synchronized (self) {
+        if (self.targetBundleIdentifiers.count == 0) return YES;
+        return bundleIdentifier.length > 0 &&
+            [self.targetBundleIdentifiers containsObject:bundleIdentifier];
+    }
+}
+
+- (BOOL)isCurrentProcessSelected {
+    return [self isBundleIdentifierSelected:NSBundle.mainBundle.bundleIdentifier];
 }
 
 @end

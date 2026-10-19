@@ -12,6 +12,7 @@
         </array>
         <key>Classes</key>
         <array>
+            <string>AVCaptureSession</string>
             <string>AVCaptureVideoDataOutput</string>
             <string>AVCaptureAudioDataOutput</string>
             <string>AVCaptureVideoPreviewLayer</string>

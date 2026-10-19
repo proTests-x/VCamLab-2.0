@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added a searchable multi-application selector in Settings. An empty selection preserves the historical global mode; otherwise application hooks load only in the chosen bundle identifiers.
+- Scoped the `mediaserverd` replacement path with a short-lived heartbeat from active `AVCaptureSession` and `ARSession` instances in selected apps, preventing unrelated camera apps from receiving the virtual feed.
+- Added an `ARFrame.capturedImage` fallback and changed processed/RAW photo export to prefer the virtual primary image even when private camera metadata cannot be fully round-tripped.
+- Added explicit system Camera and WebKit content-process targets for `UIImagePickerController`, `WKWebView`, Safari and WebRTC camera hosts.
+
 ## 2.24.2 - 2026-08-15
 
 - Fixed a concrete iOS 15.8.8 shared-frame false-stale failure. Every consumer now maintains freshness in its own monotonic-clock domain and refreshes that observation when the published generation advances or SpringBoard's packed producer-runtime state changes. A zero, future or temporarily stuck direct timestamp can no longer hide an actively published global IOSurface, while a genuinely stopped producer still ages out under the configured policy.

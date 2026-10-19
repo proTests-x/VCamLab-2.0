@@ -10,6 +10,7 @@
 #import <notify.h>
 #import <os/lock.h>
 
+#import "VCPApplicationSelectorController.h"
 #import "../VCJPEGParser.h"
 #import "../VCMediaTrackLoader.h"
 #import "../VCPreferenceValidation.h"
@@ -753,6 +754,26 @@ static BOOL VCPRepairStoredPreferences(void) {
             (__bridge CFStringRef)key, normalized);
     }];
 
+    id targetValue = CFBridgingRelease(CFPreferencesCopyAppValue(
+        CFSTR("targetBundleIdentifiers"), VCPreferencesDomain));
+    NSMutableOrderedSet<NSString *> *targetIdentifiers =
+        [NSMutableOrderedSet orderedSet];
+    if ([targetValue isKindOfClass:NSArray.class]) {
+        NSCharacterSet *whitespace = NSCharacterSet.whitespaceAndNewlineCharacterSet;
+        for (id candidate in (NSArray *)targetValue) {
+            if (![candidate isKindOfClass:NSString.class]) continue;
+            NSString *identifier = [candidate stringByTrimmingCharactersInSet:whitespace];
+            if (identifier.length == 0 || identifier.length > 255) continue;
+            if ([identifier rangeOfCharacterFromSet:whitespace].location != NSNotFound) continue;
+            [targetIdentifiers addObject:identifier];
+            if (targetIdentifiers.count >= 128) break;
+        }
+    }
+    NSArray<NSString *> *normalizedTargets = [targetIdentifiers.array
+        sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    changed |= VCPSetPreferenceValueIfDifferent(
+        CFSTR("targetBundleIdentifiers"), normalizedTargets);
+
     if (changed) CFPreferencesAppSynchronize(VCPreferencesDomain);
     return changed;
 }
@@ -798,6 +819,8 @@ static BOOL VCPRepairStoredPreferences(void) {
 - (id)currentSharedVideoBusStatus:(PSSpecifier *)specifier;
 - (id)currentSystemVideoPipelineStatus:(PSSpecifier *)specifier;
 - (id)currentApplicationFallbackStatus:(PSSpecifier *)specifier;
+- (id)currentTargetApplicationsSummary:(PSSpecifier *)specifier;
+- (void)chooseTargetApplications:(PSSpecifier *)specifier;
 - (id)currentLocalTransformStatus:(PSSpecifier *)specifier;
 - (id)currentLocalVolumeHookStatus:(PSSpecifier *)specifier;
 @end
@@ -892,6 +915,23 @@ static BOOL VCPRepairStoredPreferences(void) {
     [self performSafeRuntimePresentationRefresh];
     UISelectionFeedbackGenerator *feedback = [UISelectionFeedbackGenerator new];
     [feedback selectionChanged];
+}
+
+- (id)currentTargetApplicationsSummary:(PSSpecifier *)specifier {
+    [self synchronizePreferencesIfNeeded:YES];
+    id value = CFBridgingRelease(CFPreferencesCopyAppValue(
+        CFSTR("targetBundleIdentifiers"), VCPreferencesDomain));
+    if (![value isKindOfClass:NSArray.class] || [value count] == 0) {
+        return @"Todas las apps";
+    }
+    NSUInteger count = MIN((NSUInteger)[value count], (NSUInteger)128);
+    return count == 1 ? @"1 aplicación" : [NSString stringWithFormat:@"%@ aplicaciones", @(count)];
+}
+
+- (void)chooseTargetApplications:(PSSpecifier *)specifier {
+    VCPApplicationSelectorController *controller =
+        [VCPApplicationSelectorController new];
+    [self.navigationController pushViewController:controller animated:YES];
 }
 
 - (void)refreshRuntimePresentation {

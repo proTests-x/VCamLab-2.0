@@ -4,6 +4,8 @@
 <dict>
     <key>enabled</key>
     <true/>
+    <key>targetBundleIdentifiers</key>
+    <array/>
     <key>sourceType</key>
     <integer>0</integer>
     <key>localMediaPath</key>

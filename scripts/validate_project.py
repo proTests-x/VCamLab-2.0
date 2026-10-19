@@ -90,6 +90,7 @@ def validate_preferences() -> None:
     implementation = read_text("VCPreferences.m")
     header = read_text("VCPreferences.h")
     controller = read_text("prefs/VCPRootListController.m")
+    application_selector = read_text("prefs/VCPApplicationSelectorController.m")
     track_loader = read_text("VCMediaTrackLoader.h")
     bundle_makefile = read_text("prefs/Makefile")
     workflow = read_text(".github/workflows/test.yml")
@@ -162,6 +163,7 @@ def validate_preferences() -> None:
         "showCurrentSourceGuide:",
         "reloadCurrentSource:",
         "copyRuntimeDiagnostics:",
+        "chooseTargetApplications:",
     ):
         if action not in actions:
             fail(f"settings control panel is missing action: {action}")
@@ -243,8 +245,26 @@ def validate_preferences() -> None:
             "lastAttemptMilliseconds",
             '@"maximumLength": @4096',
             '@"maximumLength": @128',
+            "currentTargetApplicationsSummary:",
+            "VCPApplicationSelectorController",
         ),
         "mobile native settings and runtime recovery",
+    )
+    require(
+        application_selector + implementation + header + bundle_makefile,
+        (
+            "LSApplicationWorkspace",
+            "allInstalledApplications",
+            "targetBundleIdentifiers",
+            "com.apple.camera",
+            "com.apple.WebKit.WebContent",
+            "VCPWriteSelectedBundleIdentifiers",
+            "VCTargetBundleIdentifiersKey",
+            "targetBundleIdentifiersValue",
+            "isCurrentProcessSelected",
+            "VCPApplicationSelectorController.m",
+        ),
+        "target application selection",
     )
     require(
         track_loader,
@@ -378,6 +398,7 @@ def validate_preferences() -> None:
 def validate_injection_filters() -> None:
     app_filter = read_plist("AVFCameraSupport.plist").get("Filter", {})
     expected_classes = {
+        "AVCaptureSession",
         "AVCaptureVideoDataOutput",
         "AVCaptureAudioDataOutput",
         "AVCaptureVideoPreviewLayer",
@@ -723,6 +744,8 @@ def validate_hooks_and_fail_open() -> None:
             "allowInheritedMethod",
             "continuing low-frequency scans",
             "VCMediaServerVideoRuntimeReplacementSucceeded",
+            "VCTargetCaptureIsActive(3.0)",
+            "hasTargetBundleFilter",
         ),
         "system hook fail-open path",
     )
@@ -747,6 +770,11 @@ def validate_hooks_and_fail_open() -> None:
             "VCReleaseSharedVideoPixelBuffer",
             "VCReportApplicationVideoRuntimeEvent",
             "VCApplicationVideoRuntimePreviewFrameDisplayed",
+            "%hook AVCaptureSession",
+            "%hook ARSession",
+            "%hook ARFrame",
+            "VCTargetCameraConsumerDidStart",
+            "isCurrentProcessSelected",
         ),
         "application fallback",
     )

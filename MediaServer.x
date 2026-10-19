@@ -14,6 +14,7 @@
 
 #import "VCAudioSampleConverter.h"
 #import "VCFrameConverter.h"
+#import "VCPreferences.h"
 #import "VCSharedMediaBus.h"
 #import "VCSharedMediaProtocol.h"
 #import "VCStreamCoordinator.h"
@@ -581,6 +582,17 @@ static void VCMediaServerEmitSampleBuffer(id object, SEL selector, CMSampleBuffe
         if (CMGetAttachment(originalBuffer,
                             VCReplacedSampleAttachmentKey,
                             NULL) == kCFBooleanTrue) {
+            originalEmit(object, selector, originalBuffer);
+            return;
+        }
+
+        // When the user chooses explicit target applications, the system-wide
+        // BW pipeline is enabled only while one of those injected processes is
+        // publishing a fresh camera-session heartbeat. An empty target list
+        // intentionally preserves the historical global behavior.
+        VCPreferences *preferences = VCPreferences.sharedPreferences;
+        if (preferences.hasTargetBundleFilter &&
+            !VCTargetCaptureIsActive(3.0)) {
             originalEmit(object, selector, originalBuffer);
             return;
         }

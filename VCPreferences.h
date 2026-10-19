@@ -21,6 +21,8 @@ FOUNDATION_EXPORT NSString * const VCSourceRestartTokenKey;
 FOUNDATION_EXPORT NSString * const VCFloatingControlEnabledKey;
 FOUNDATION_EXPORT NSString * const VCFloatingControlCenterXKey;
 FOUNDATION_EXPORT NSString * const VCFloatingControlCenterYKey;
+FOUNDATION_EXPORT NSString * const VCTargetBundleIdentifiersKey;
+FOUNDATION_EXPORT const char * const VCTargetCaptureStateNotification;
 
 typedef NS_ENUM(NSInteger, VCSourceType) {
     VCSourceTypeNetwork = 0,
@@ -47,10 +49,21 @@ typedef NS_ENUM(NSInteger, VCSourceType) {
 /// Opaque settings-generated token used to rebuild the active producer without
 /// changing any user-facing source configuration.
 @property (atomic, copy, readonly) NSString *sourceRestartToken;
+/// Empty preserves the historical global mode. Otherwise only these bundle
+/// identifiers install the application compatibility hooks.
+@property (atomic, copy, readonly) NSSet<NSString *> *targetBundleIdentifiers;
 
 + (instancetype)sharedPreferences;
 - (BOOL)reload;
+- (BOOL)hasTargetBundleFilter;
+- (BOOL)isBundleIdentifierSelected:(nullable NSString *)bundleIdentifier;
+- (BOOL)isCurrentProcessSelected;
 
 @end
+
+/// Publishes a short-lived heartbeat while a selected application owns an
+/// active camera session. mediaserverd uses it to scope the system-level path.
+FOUNDATION_EXPORT void VCSetTargetCaptureActive(BOOL active);
+FOUNDATION_EXPORT BOOL VCTargetCaptureIsActive(NSTimeInterval maximumAge);
 
 NS_ASSUME_NONNULL_END

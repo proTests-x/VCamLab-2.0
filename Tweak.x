@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <ARKit/ARKit.h>
 #import <CoreImage/CoreImage.h>
 #import <CoreMedia/CoreMedia.h>
 #import <CoreVideo/CoreVideo.h>
@@ -12,6 +13,7 @@
 
 #import "VCAudioSampleConverter.h"
 #import "VCFrameConverter.h"
+#import "VCPreferences.h"
 #import "VCSharedMediaBus.h"
 #import "VCSharedMediaProtocol.h"
 #import "VCStreamCoordinator.h"
@@ -25,15 +27,122 @@ static char VCPhotoPreviewPixelBufferAssociationKey;
 static char VCPhotoSourceSnapshotAssociationKey;
 static char VCPhotoReplacementModeAssociationKey;
 static char VCPhotoFileDataAssociationKey;
+static char VCARFramePixelBufferAssociationKey;
 static dispatch_once_t VCPhotoJPEGFallbackLogToken;
 static dispatch_once_t VCPhotoMetadataFailureLogToken;
 static dispatch_once_t VCStreamMonitoringToken;
+static char VCTargetSessionActiveAssociationKey;
+static dispatch_queue_t VCTargetSessionStateQueue;
+static dispatch_source_t VCTargetSessionHeartbeatTimer;
+static NSUInteger VCTargetSessionActiveCount;
+
+static BOOL VCApplicationReplacementAllowed(void) {
+    return [VCPreferences.sharedPreferences isCurrentProcessSelected];
+}
 
 static void VCEnsureStreamMonitoring(void) {
     dispatch_once(&VCStreamMonitoringToken, ^{
         [[VCStreamCoordinator sharedCoordinator] startMonitoring];
     });
 }
+
+static dispatch_queue_t VCTargetCaptureQueue(void) {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        VCTargetSessionStateQueue = dispatch_queue_create(
+            "com.murkaska.virtualcampro.target-capture",
+            DISPATCH_QUEUE_SERIAL);
+    });
+    return VCTargetSessionStateQueue;
+}
+
+static void VCEnsureTargetCaptureHeartbeatLocked(void) {
+    if (VCTargetSessionHeartbeatTimer) return;
+    VCTargetSessionHeartbeatTimer = dispatch_source_create(
+        DISPATCH_SOURCE_TYPE_TIMER,
+        0,
+        0,
+        VCTargetCaptureQueue());
+    dispatch_source_set_timer(VCTargetSessionHeartbeatTimer,
+                              dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC),
+                              NSEC_PER_SEC,
+                              100 * NSEC_PER_MSEC);
+    dispatch_source_set_event_handler(VCTargetSessionHeartbeatTimer, ^{
+        VCSetTargetCaptureActive(VCTargetSessionActiveCount > 0 &&
+                                 VCApplicationReplacementAllowed());
+    });
+    dispatch_resume(VCTargetSessionHeartbeatTimer);
+}
+
+static void VCTargetCameraConsumerDidStart(id consumer) {
+    if (!consumer) return;
+    [VCPreferences.sharedPreferences reload];
+    if (!VCApplicationReplacementAllowed()) return;
+    @synchronized (consumer) {
+        if ([objc_getAssociatedObject(consumer,
+                                      &VCTargetSessionActiveAssociationKey) boolValue]) {
+            return;
+        }
+        objc_setAssociatedObject(consumer,
+                                 &VCTargetSessionActiveAssociationKey,
+                                 @YES,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    dispatch_async(VCTargetCaptureQueue(), ^{
+        VCTargetSessionActiveCount++;
+        VCEnsureTargetCaptureHeartbeatLocked();
+        VCSetTargetCaptureActive(YES);
+    });
+}
+
+static void VCTargetCameraConsumerDidStop(id consumer) {
+    if (!consumer) return;
+    @synchronized (consumer) {
+        if (![objc_getAssociatedObject(consumer,
+                                       &VCTargetSessionActiveAssociationKey) boolValue]) {
+            return;
+        }
+        objc_setAssociatedObject(consumer,
+                                 &VCTargetSessionActiveAssociationKey,
+                                 nil,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    dispatch_async(VCTargetCaptureQueue(), ^{
+        if (VCTargetSessionActiveCount > 0) VCTargetSessionActiveCount--;
+        VCSetTargetCaptureActive(VCTargetSessionActiveCount > 0);
+    });
+}
+
+#pragma mark - Selected application camera activity
+
+%hook AVCaptureSession
+
+- (void)startRunning {
+    %orig;
+    if (self.isRunning) VCTargetCameraConsumerDidStart(self);
+}
+
+- (void)stopRunning {
+    %orig;
+    VCTargetCameraConsumerDidStop(self);
+}
+
+%end
+
+%hook ARSession
+
+- (void)runWithConfiguration:(ARConfiguration *)configuration
+                     options:(ARSessionRunOptions)options {
+    %orig(configuration, options);
+    VCTargetCameraConsumerDidStart(self);
+}
+
+- (void)pause {
+    %orig;
+    VCTargetCameraConsumerDidStop(self);
+}
+
+%end
 
 static CFStringRef const VCReplacedSampleAttachmentKey =
     CFSTR(VC_SYSTEM_REPLACEMENT_ATTACHMENT_KEY);
@@ -67,6 +176,7 @@ static CMSampleBufferRef VCCopyCurrentReplacement(
     uint8_t *runtimeDetailOut) CF_RETURNS_RETAINED {
     if (runtimeEventOut) *runtimeEventOut = VCApplicationVideoRuntimeUnknown;
     if (runtimeDetailOut) *runtimeDetailOut = 0;
+    if (!VCApplicationReplacementAllowed()) return NULL;
     VCStreamCoordinator *coordinator = [VCStreamCoordinator sharedCoordinator];
     // Suppress only for evidence attached to this exact sample. A global
     // mediaserverd heartbeat cannot prove that another capture session, node
@@ -279,7 +389,8 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
        fromConnection:(AVCaptureConnection *)connection {
     id<AVCaptureAudioDataOutputSampleBufferDelegate> delegate = self.originalDelegate;
     if (![delegate respondsToSelector:_cmd]) return;
-    CMSampleBufferRef replacement = VCSampleWasReplacedBySystem(sampleBuffer)
+    CMSampleBufferRef replacement = !VCApplicationReplacementAllowed() ||
+        VCSampleWasReplacedBySystem(sampleBuffer)
         ? NULL : VCCopyReplacementAudioSampleBuffer(sampleBuffer,
                                                      self.replacementContext);
     [delegate captureOutput:output
@@ -375,6 +486,16 @@ static CVPixelBufferRef VCCopySessionCompatibilityPixelBuffer(
 
     CALayer *overlay = objc_getAssociatedObject(previewLayer, &VCPreviewOverlayAssociationKey);
     if (!overlay) return;
+    if (!VCApplicationReplacementAllowed()) {
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        overlay.contents = nil;
+        overlay.hidden = YES;
+        [CATransaction commit];
+        self.displayedSurface = nil;
+        [self replaceSharedPixelBufferLease:NULL];
+        return;
+    }
 
     VCStreamCoordinator *coordinator = [VCStreamCoordinator sharedCoordinator];
     BOOL aspectFill = YES;
@@ -569,6 +690,47 @@ static void VCEnsurePreviewOverlay(AVCaptureVideoPreviewLayer *previewLayer) {
 - (void)dealloc { if (_pixelBuffer) CVPixelBufferRelease(_pixelBuffer); }
 @end
 
+#pragma mark - ARKit captured image compatibility path
+
+%hook ARFrame
+
+- (CVPixelBufferRef)capturedImage {
+    CVPixelBufferRef original = %orig;
+    if (!original || !VCApplicationReplacementAllowed()) return original;
+
+    VCPixelBufferBox *cached = objc_getAssociatedObject(
+        self,
+        &VCARFramePixelBufferAssociationKey);
+    if (cached.pixelBuffer) return cached.pixelBuffer;
+
+    VCEnsureStreamMonitoring();
+    BOOL aspectFill = YES;
+    NSInteger preferredFPS = 60;
+    CVPixelBufferRef source = [[VCStreamCoordinator sharedCoordinator]
+        copyLatestPixelBufferWithAspectFill:&aspectFill
+                               preferredFPS:&preferredFPS];
+    if (!source) return original;
+    CVPixelBufferRef replacement = VCCopyPixelBufferMatchingTemplate(source,
+                                                                      original,
+                                                                      aspectFill);
+    VCReleaseSharedVideoPixelBuffer(source);
+    if (!replacement) return original;
+
+    VCPixelBufferBox *box = [[VCPixelBufferBox alloc]
+        initWithPixelBuffer:replacement];
+    CVPixelBufferRelease(replacement);
+    objc_setAssociatedObject(self,
+                             &VCARFramePixelBufferAssociationKey,
+                             box,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    VCReportApplicationVideoRuntimeEvent(
+        VCApplicationVideoRuntimeReplacementSucceeded,
+        0);
+    return box.pixelBuffer ?: original;
+}
+
+%end
+
 @interface VCPhotoSourceSnapshot : NSObject {
     CVPixelBufferRef _pixelBuffer;
 }
@@ -638,7 +800,7 @@ static VCPhotoReplacementMode VCReplacementModeForPhoto(AVCapturePhoto *photo) {
         // per-photo fallback over suppressing this path because an unrelated
         // session emitted a global heartbeat. If the system layer already
         // replaced the photo, this reuses the same source and remains fail-open.
-        if (coordinator.isReplacementActive) {
+        if (VCApplicationReplacementAllowed() && coordinator.isReplacementActive) {
             mode = VCPhotoSnapshotLocked(photo).pixelBuffer
                 ? VCPhotoReplacementModeApplicationFallback
                 : VCPhotoReplacementModeOriginal;
@@ -809,10 +971,7 @@ static NSData *VCPhotoDataByReplacingPrimaryImage(NSData *originalData,
     }
     NSDictionary *sourceProperties = CFBridgingRelease(
         CGImageSourceCopyPropertiesAtIndex(source, 0, NULL));
-    if (!sourceProperties) {
-        CFRelease(source);
-        return nil;
-    }
+    sourceProperties = sourceProperties ?: @{};
 
     NSMutableData *resultData = [NSMutableData data];
     CGImageDestinationRef destination = CGImageDestinationCreateWithData(
@@ -834,15 +993,19 @@ static NSData *VCPhotoDataByReplacingPrimaryImage(NSData *originalData,
         // Keep the real device/EXIF/GPS identity, but emit only the verified replacement.
         BOOL finalized = CGImageDestinationFinalize(destination);
         CFRelease(destination);
-        if (finalized) {
+        if (finalized && resultData.length > 0) {
             NSData *candidateData = [resultData copy];
-            if (VCPhotoDataPreservesAuthenticMetadata(candidateData,
-                                                       sourceProperties,
-                                                       CGImageGetWidth(replacementImage),
-                                                       CGImageGetHeight(replacementImage))) {
-                CFRelease(source);
-                return candidateData;
-            }
+            // Replacement takes priority. Some RAW/HEIF containers cannot
+            // round-trip every private MakerApple field after their primary
+            // image changes; returning the real photo in that case defeats the
+            // virtual-camera contract. Keep the rewritten image and treat
+            // metadata verification as diagnostics rather than a gate.
+            VCPhotoDataPreservesAuthenticMetadata(candidateData,
+                                                   sourceProperties,
+                                                   CGImageGetWidth(replacementImage),
+                                                   CGImageGetHeight(replacementImage));
+            CFRelease(source);
+            return candidateData;
         }
     }
 
@@ -872,14 +1035,16 @@ static NSData *VCPhotoDataByReplacingPrimaryImage(NSData *originalData,
     }
     CFRelease(source);
     NSData *verifiedJPEGData = jpegFinalized ? [jpegData copy] : nil;
-    if (verifiedJPEGData &&
-        VCPhotoDataPreservesAuthenticMetadata(verifiedJPEGData,
-                                               sourceProperties,
-                                               CGImageGetWidth(replacementImage),
-                                               CGImageGetHeight(replacementImage))) {
+    if (verifiedJPEGData.length > 0) {
+        BOOL metadataVerified = VCPhotoDataPreservesAuthenticMetadata(
+            verifiedJPEGData,
+            sourceProperties,
+            CGImageGetWidth(replacementImage),
+            CGImageGetHeight(replacementImage));
         dispatch_once(&VCPhotoJPEGFallbackLogToken, ^{
             NSLog(@"[VirtualCamPro] Original photo container could not be rewritten; "
-                   @"used metadata-preserving JPEG fallback");
+                   @"used virtual JPEG fallback (metadata %@)",
+                  metadataVerified ? @"verified" : @"partially preserved");
         });
         return verifiedJPEGData;
     }
@@ -1017,6 +1182,14 @@ static NSData *VCPhotoDataByReplacingPrimaryImage(NSData *originalData,
             // VCMediaServer owns the only SpringBoard producer. This binary can
             // still be selected by a class-based Substrate filter, but must not
             // start a second decoder or install application hooks here.
+            return;
+        }
+        VCPreferences *preferences = VCPreferences.sharedPreferences;
+        [preferences reload];
+        if (![preferences isCurrentProcessSelected]) {
+            NSLog(@"[VirtualCamPro] Skipping unselected application %@ (%@)",
+                  bundleIdentifier ?: @"<no bundle>",
+                  processName ?: @"<no process>");
             return;
         }
         // Start the network decoder lazily when an application actually creates

@@ -27,6 +27,22 @@
             <key>PostNotification</key><string>com.murkaska.virtualcampro/preferences.changed</string>
         </dict>
         <dict>
+            <key>cell</key><string>PSGroupCell</string>
+            <key>label</key><string>Aplicaciones objetivo</string>
+            <key>footerText</key><string>Elige las apps en las que VCamPro debe sustituir la cámara. Sin selección se conserva el modo global. Cierra y vuelve a abrir una app después de cambiar esta lista.</string>
+        </dict>
+        <dict>
+            <key>cell</key><string>PSTitleValueCell</string>
+            <key>label</key><string>Selección actual</string>
+            <key>get</key><string>currentTargetApplicationsSummary:</string>
+            <key>vcConfigurationStatus</key><true/>
+        </dict>
+        <dict>
+            <key>cell</key><string>PSButtonCell</string>
+            <key>label</key><string>Seleccionar aplicaciones</string>
+            <key>action</key><string>chooseTargetApplications:</string>
+        </dict>
+        <dict>
             <key>cell</key><string>PSLinkListCell</string>
             <key>detail</key><string>PSListItemsController</string>
             <key>default</key><integer>0</integer>

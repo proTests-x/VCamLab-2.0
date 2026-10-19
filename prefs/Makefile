@@ -2,7 +2,7 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = VirtualCamPro
 
-VirtualCamPro_FILES = VCPRootListController.m
+VirtualCamPro_FILES = VCPRootListController.m VCPApplicationSelectorController.m
 VirtualCamPro_FRAMEWORKS = UIKit Foundation AVFoundation PhotosUI UniformTypeIdentifiers
 VirtualCamPro_PRIVATE_FRAMEWORKS = Preferences
 VirtualCamPro_INSTALL_PATH = /Library/PreferenceBundles
